@@ -1,0 +1,54 @@
+import { useState } from "react";
+import { GoogleGenAI } from "@google/genai";
+
+function App() {
+  const [task, setTask] = useState("");
+  const [response, setResponse] = useState("");
+
+  const handleAsk = async () => {
+    try {
+      console.log(import.meta.env.VITE_GEMINI_API_KEY);
+      const ai = new GoogleGenAI({
+        apiKey: import.meta.env.VITE_GEMINI_API_KEY,
+      });
+
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: `Break down this task into simple daily steps: ${task}`,
+      });
+
+      setResponse(result.text);
+    } catch (error) {
+      console.error(error);
+      setResponse(`Error: ${error.message}`);
+    }
+  };
+
+  return (
+    <div style={{ padding: "30px" }}>
+      <h1>MyPA</h1>
+      <p>Your AI Personal Assistant for Getting Things Done</p>
+
+      <input
+        type="text"
+        placeholder="Enter a task"
+        value={task}
+        onChange={(e) => setTask(e.target.value)}
+        style={{ width: "300px", padding: "10px" }}
+      />
+
+      <br />
+      <br />
+
+      <button onClick={handleAsk}>
+        Break Down Task
+      </button>
+
+      <h3>AI Response:</h3>
+
+      <p>{response}</p>
+    </div>
+  );
+}
+
+export default App;
