@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
-import { breakdownTask } from "./gemini";
+import { breakdownTask, generateDailyPlan } from "./gemini";
 
 function App() {
   const [task, setTask] = useState("");
@@ -12,6 +12,8 @@ function App() {
   const [breakdowns, setBreakdowns] = useState({});
   const [visibleBreakdowns, setVisibleBreakdowns] = useState({});
   const [loadingTask, setLoadingTask] = useState(null);
+  const [dailyPlan, setDailyPlan] = useState("");
+  const [planLoading, setPlanLoading] = useState(false);
 
   useEffect(() => {
     const savedTasks = JSON.parse(localStorage.getItem("tasks")) || [];
@@ -140,6 +142,24 @@ function App() {
     );
 
     setTasks(updatedTasks);
+  };
+
+  const handleGeneratePlan = async () => {
+    const activeTasks = tasks.filter((t) => !t.completed);
+
+    if (activeTasks.length === 0) {
+      setDailyPlan("No active tasks available.");
+      return;
+    }
+
+    setPlanLoading(true);
+
+    try {
+      const response = await generateDailyPlan(tasks);
+      setDailyPlan(response);
+    } finally {
+      setPlanLoading(false);
+    }
   };
 
   const handleBreakdown = async (task) => {
@@ -271,6 +291,31 @@ function App() {
           <hr className="divider" />
         </>
       )}
+
+      <section className="recommendation-section">
+        <h2 className="section-title">✨ AI Daily Planner</h2>
+
+        <button
+          onClick={handleGeneratePlan}
+          className="btn btn-primary"
+          disabled={planLoading}
+        >
+          {planLoading
+            ? "Generating Plan..."
+            : dailyPlan
+              ? "🔄 Regenerate Plan"
+              : "✨ Generate Today's Plan"}
+        </button>
+
+        {dailyPlan && (
+          <div className="recommendation-card">
+            <strong>Generated Daily Plan</strong>
+            <pre className="recommendation-card__text">{dailyPlan}</pre>
+          </div>
+        )}
+      </section>
+
+      <hr className="divider" />
 
       <section className="tasks-section">
         <h2 className="section-title">
