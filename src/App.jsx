@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
+import { breakdownTask } from "./gemini";
 
 function App() {
   const [task, setTask] = useState("");
@@ -8,6 +9,9 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [recommendation, setRecommendation] = useState("");
+  const [breakdowns, setBreakdowns] = useState({});
+  const [visibleBreakdowns, setVisibleBreakdowns] = useState({});
+  const [loadingTask, setLoadingTask] = useState(null);
 
   useEffect(() => {
     const savedTasks = JSON.parse(localStorage.getItem("tasks")) || [];
@@ -136,6 +140,32 @@ function App() {
     );
 
     setTasks(updatedTasks);
+  };
+
+  const handleBreakdown = async (task) => {
+    if (breakdowns[task.id]) {
+      setVisibleBreakdowns((prev) => ({
+        ...prev,
+        [task.id]: !prev[task.id],
+      }));
+      return;
+    }
+
+    setLoadingTask(task.id);
+
+    try {
+      const response = await breakdownTask(task.task);
+      setBreakdowns((prev) => ({
+        ...prev,
+        [task.id]: response,
+      }));
+      setVisibleBreakdowns((prev) => ({
+        ...prev,
+        [task.id]: true,
+      }));
+    } finally {
+      setLoadingTask(null);
+    }
   };
 
   return (
@@ -290,7 +320,32 @@ function App() {
                 >
                   Delete
                 </button>
+
+                <button
+                  onClick={() => handleBreakdown(t)}
+                  className="btn btn-secondary"
+                  disabled={loadingTask === t.id}
+                >
+                  {loadingTask === t.id
+                    ? "Generating..."
+                    : breakdowns[t.id]
+                      ? visibleBreakdowns[t.id]
+                        ? "✨ Hide Breakdown"
+                        : "✨ Show Breakdown"
+                      : "✨ Break Down Task"}
+                </button>
               </div>
+
+              {loadingTask === t.id && (
+                <p className="task-card__meta">Generating AI breakdown...</p>
+              )}
+
+              {visibleBreakdowns[t.id] && breakdowns[t.id] && (
+                <div className="task-card__meta">
+                  <strong>AI Breakdown</strong>
+                  <pre>{breakdowns[t.id]}</pre>
+                </div>
+              )}
             </div>
           ))
         )}
