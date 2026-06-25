@@ -14,10 +14,14 @@ function App() {
   const [loadingTask, setLoadingTask] = useState(null);
   const [dailyPlan, setDailyPlan] = useState("");
   const [planLoading, setPlanLoading] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     const savedTasks = JSON.parse(localStorage.getItem("tasks")) || [];
     setTasks(savedTasks);
+    const savedStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
+    setStreak(savedStreak);
     setTasksLoaded(true);
   }, []);
 
@@ -137,11 +141,32 @@ function App() {
   };
 
   const toggleComplete = (id) => {
+    const taskToToggle = tasks.find((t) => t.id === id);
+    const isCompleting = taskToToggle && !taskToToggle.completed;
+
     const updatedTasks = tasks.map((task) =>
       task.id === id ? { ...task, completed: !task.completed } : task
     );
 
     setTasks(updatedTasks);
+
+    if (isCompleting) {
+      const today = new Date().toISOString().split("T")[0];
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split("T")[0];
+      const lastCompletionDate = localStorage.getItem("lastCompletionDate");
+
+      if (lastCompletionDate !== today) {
+        const currentStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
+        const newStreak =
+          lastCompletionDate === yesterdayStr ? currentStreak + 1 : 1;
+
+        setStreak(newStreak);
+        localStorage.setItem("streak", newStreak.toString());
+        localStorage.setItem("lastCompletionDate", today);
+      }
+    }
   };
 
   const handleGeneratePlan = async () => {
@@ -188,9 +213,41 @@ function App() {
     }
   };
 
+  const completedTasks = tasks.filter((task) => task.completed).length;
+  const totalTasks = tasks.length;
+  const productivityScore =
+    totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+  const filteredTasks = tasks.filter((t) => {
+    if (filter === "all") return true;
+    if (filter === "today") return getStatus(t.deadline) === "DUE TODAY";
+    if (filter === "this-week") {
+      const today = new Date();
+      const due = new Date(t.deadline);
+      const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+      return diff >= 0 && diff <= 7;
+    }
+    if (filter === "this-month") {
+      const today = new Date();
+      const due = new Date(t.deadline);
+      return (
+        due.getMonth() === today.getMonth() &&
+        due.getFullYear() === today.getFullYear()
+      );
+    }
+    if (filter === "completed") return t.completed;
+    if (filter === "overdue")
+      return !t.completed && getStatus(t.deadline) === "OVERDUE";
+    return true;
+  });
+
   return (
     <div className="dashboard">
       <header className="hero">
+        <div className="hero__stats">
+          <span className="hero__stat">🔥 Streak: {streak}</span>
+          <span className="hero__stat">⚡ Productivity: {productivityScore}%</span>
+        </div>
         <h1 className="hero__title">MyPA</h1>
         <p className="hero__subtitle">
           Your AI Personal Assistant for Getting Things Done
@@ -318,9 +375,26 @@ function App() {
       <hr className="divider" />
 
       <section className="tasks-section">
-        <h2 className="section-title">
-          My Tasks ({tasks.filter((t) => !t.completed).length})
-        </h2>
+        <div className="task-filters">
+          {[
+            { key: "all", label: "All" },
+            { key: "today", label: "Today" },
+            { key: "this-week", label: "This Week" },
+            { key: "this-month", label: "This Month" },
+            { key: "completed", label: "Completed" },
+            { key: "overdue", label: "Overdue" },
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={`btn btn-secondary task-filters__btn${filter === key ? " task-filters__btn--active" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <h2 className="section-title">My Tasks ({filteredTasks.length})</h2>
 
         {tasks.length === 0 ? (
           <div className="empty-state">
@@ -329,7 +403,7 @@ function App() {
             <p className="empty-state__message">Add a task to get started.</p>
           </div>
         ) : (
-          tasks.map((t) => (
+          filteredTasks.map((t) => (
             <div
               key={t.id}
               className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
