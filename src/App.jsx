@@ -379,8 +379,14 @@ function App() {
     <div className="dashboard">
       <header className="hero">
         <div className="hero__stats">
-          <span className="hero__stat">🔥 Streak: {streak}</span>
-          <span className="hero__stat">⚡ Productivity: {productivityScore}%</span>
+          <div className="hero__stat-card">
+            <span className="hero__stat-label">🔥 Streak</span>
+            <span className="hero__stat-value">{streak} Days</span>
+          </div>
+          <div className="hero__stat-card">
+            <span className="hero__stat-label">⚡ Productivity</span>
+            <span className="hero__stat-value">{productivityScore}%</span>
+          </div>
         </div>
         <h1 className="hero__title">MyPA</h1>
         <p className="hero__subtitle">
@@ -392,94 +398,160 @@ function App() {
         <h2 className="section-title">Add Task</h2>
 
         <div className="task-form">
-          <div className="type-selector">
-            <span className="type-selector__label">Type</span>
-            <label className="type-selector__option">
+          <div className="type-selector" role="group" aria-label="Type">
+            <label
+              className={`type-selector__pill${itemType === "task" ? " type-selector__pill--active" : ""}`}
+            >
               <input
                 type="radio"
                 name="itemType"
                 value="task"
                 checked={itemType === "task"}
                 onChange={() => setItemType("task")}
+                className="type-selector__input"
               />
-              Task
+              {itemType === "task" ? "✓ " : ""}Task
             </label>
-            <label className="type-selector__option">
+            <label
+              className={`type-selector__pill${itemType === "event" ? " type-selector__pill--active" : ""}`}
+            >
               <input
                 type="radio"
                 name="itemType"
                 value="event"
                 checked={itemType === "event"}
                 onChange={() => setItemType("event")}
+                className="type-selector__input"
               />
               Event
             </label>
           </div>
 
-          <input
-            type="text"
-            placeholder={itemType === "task" ? "Task Name" : "Event Name"}
-            value={task}
-            onChange={(e) => setTask(e.target.value)}
-            className="input"
-          />
-
           {itemType === "task" ? (
-            <>
-              <input
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="input"
-              />
+            <div className="task-form__grid task-form__grid--task">
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="task-name">
+                  Task Name
+                </label>
+                <input
+                  id="task-name"
+                  type="text"
+                  placeholder="Task Name"
+                  value={task}
+                  onChange={(e) => setTask(e.target.value)}
+                  className="input"
+                />
+              </div>
 
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="select"
-              >
-                <option value="High">High</option>
-                <option value="Medium">Medium</option>
-                <option value="Low">Low</option>
-              </select>
-            </>
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="task-deadline">
+                  📅 Deadline
+                </label>
+                <input
+                  id="task-deadline"
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="input"
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="task-priority">
+                  Priority
+                </label>
+                <select
+                  id="task-priority"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="select"
+                >
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+            </div>
           ) : (
             <>
-              <input
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-                className="input"
-                placeholder="Event Date"
-              />
+              <div className="task-form__grid task-form__grid--event-row1">
+                <div className="form-field">
+                  <label className="form-field__label" htmlFor="event-name">
+                    Event Name
+                  </label>
+                  <input
+                    id="event-name"
+                    type="text"
+                    placeholder="Event Name"
+                    value={task}
+                    onChange={(e) => setTask(e.target.value)}
+                    className="input"
+                  />
+                </div>
 
-              <input
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="input"
-              />
+                <div className="form-field">
+                  <label className="form-field__label" htmlFor="event-date">
+                    📅 Event Date
+                  </label>
+                  <input
+                    id="event-date"
+                    type="date"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    className="input"
+                  />
+                </div>
 
-              <input
-                type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="input"
-              />
+                <div className="form-field">
+                  <label className="form-field__label" htmlFor="event-start">
+                    🕒 Start Time
+                  </label>
+                  <input
+                    id="event-start"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="input"
+                  />
+                </div>
+              </div>
 
-              <input
-                type="text"
-                placeholder="Location (optional)"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="input"
-              />
+              <div className="task-form__grid task-form__grid--event-row2">
+                <div className="form-field">
+                  <label className="form-field__label" htmlFor="event-end">
+                    🕒 End Time
+                  </label>
+                  <input
+                    id="event-end"
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="input"
+                  />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-field__label" htmlFor="event-location">
+                    📍 Location
+                  </label>
+                  <input
+                    id="event-location"
+                    type="text"
+                    placeholder="Location (optional)"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="input"
+                  />
+                </div>
+              </div>
             </>
           )}
 
-          <button onClick={addTask} className="btn btn-primary">
-            {itemType === "task" ? "Add Task" : "Add Event"}
-          </button>
+          <div className="task-form__actions">
+            <button onClick={addTask} className="btn btn-primary task-form__submit">
+              {itemType === "task" ? "Add Task" : "Add Event"}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -621,8 +693,11 @@ function App() {
                 key={t.id}
                 className={`task-card event-card${t.completed ? " task-card--completed" : ""}`}
               >
-                <h3 className="task-card__title">🎉 {getTitle(t)}</h3>
-                <p className="task-card__meta">{formatEventDate(t.eventDate)}</p>
+                <div className="task-card__header">
+                  <span className="item-type-badge item-type-badge--event">EVENT</span>
+                  <h3 className="task-card__title">🎉 {getTitle(t)}</h3>
+                </div>
+                <p className="task-card__meta">📅 {formatEventDate(t.eventDate)}</p>
                 <p className="task-card__meta">
                   🕒 {formatTime(t.startTime)} - {formatTime(t.endTime)}
                 </p>
@@ -651,8 +726,11 @@ function App() {
                 key={t.id}
                 className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
               >
-                <h3 className="task-card__title">{getTitle(t)}</h3>
-                <p className="task-card__meta">Deadline: {t.deadline}</p>
+                <div className="task-card__header">
+                  <span className="item-type-badge item-type-badge--task">TASK</span>
+                  <h3 className="task-card__title">{getTitle(t)}</h3>
+                </div>
+                <p className="task-card__meta">📅 Deadline: {t.deadline}</p>
 
                 <div className="task-card__badges">
                   <span
