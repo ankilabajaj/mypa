@@ -2,10 +2,65 @@ import { useState, useEffect } from "react";
 import "./App.css";
 import { breakdownTask, generateDailyPlan } from "./gemini";
 
+const isEvent = (item) => item.type === "event";
+const isTask = (item) => !isEvent(item);
+const getTitle = (item) => item.title || item.task || "";
+const getItemDate = (item) => (isEvent(item) ? item.eventDate : item.deadline);
+
+const formatEventDate = (dateStr) => {
+  const date = new Date(`${dateStr}T00:00:00`);
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  const [hours, minutes] = timeStr.split(":");
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
+};
+
+const isSameDay = (dateStr) => {
+  const today = new Date();
+  const d = new Date(`${dateStr}T00:00:00`);
+  return (
+    d.getDate() === today.getDate() &&
+    d.getMonth() === today.getMonth() &&
+    d.getFullYear() === today.getFullYear()
+  );
+};
+
+const isWithinDays = (dateStr, days) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(`${dateStr}T00:00:00`);
+  const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+  return diff >= 0 && diff <= days;
+};
+
+const isThisMonth = (dateStr) => {
+  const today = new Date();
+  const d = new Date(dateStr);
+  return (
+    d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
+  );
+};
+
 function App() {
   const [task, setTask] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [itemType, setItemType] = useState("task");
+  const [eventDate, setEventDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [location, setLocation] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [tasks, setTasks] = useState([]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [recommendation, setRecommendation] = useState("");
@@ -18,7 +73,13 @@ function App() {
   const [streak, setStreak] = useState(0);
 
   useEffect(() => {
-    const savedTasks = JSON.parse(localStorage.getItem("tasks")) || [];
+    const savedTasks = (JSON.parse(localStorage.getItem("tasks")) || []).map(
+      (item) => ({
+        ...item,
+        type: item.type || "task",
+        title: item.title || item.task,
+      })
+    );
     setTasks(savedTasks);
     const savedStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
     setStreak(savedStreak);
@@ -43,31 +104,61 @@ function App() {
   }, [tasks]);
 
   const addTask = () => {
-    if (!task || !deadline) return;
+    if (itemType === "task") {
+      if (!task || !deadline) return;
 
-    const newTask = {
+      const newTask = {
+        id: Date.now(),
+        title: task,
+        task,
+        type: "task",
+        deadline,
+        priority,
+        completed: false,
+      };
+
+      const updatedTasks = [...tasks, newTask];
+      updatedTasks.sort(
+        (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
+      );
+      setTasks(updatedTasks);
+      setTask("");
+      setDeadline("");
+      setPriority("Medium");
+      return;
+    }
+
+    if (!task || !eventDate || !startTime || !endTime) return;
+
+    const newEvent = {
       id: Date.now(),
-      task,
-      deadline,
-      priority,
+      title: task,
+      type: "event",
+      eventDate,
+      startTime,
+      endTime,
+      location,
       completed: false,
     };
 
-    const updatedTasks = [...tasks, newTask];
-
-    updatedTasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-
+    const updatedTasks = [...tasks, newEvent];
+    updatedTasks.sort(
+      (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
+    );
     setTasks(updatedTasks);
-
     setTask("");
-    setDeadline("");
-    setPriority("Medium");
+    setEventDate("");
+    setStartTime("");
+    setEndTime("");
+    setLocation("");
   };
 
   const deleteTask = (id) => {
     const updatedTasks = tasks.filter((t) => t.id !== id);
 
-    updatedTasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+    updatedTasks.sort(
+      (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
+    );
 
     setTasks(updatedTasks);
   };
@@ -81,7 +172,7 @@ function App() {
     }
 
     setRecommendation(
-      `Focus on "${topTask.task}" because it is ${
+      `Focus on "${getTitle(topTask)}" because it is ${
         topTask.priority
       } priority and currently ${getStatus(topTask.deadline)}.`
     );
@@ -111,7 +202,7 @@ function App() {
   };
 
   const getTopTask = () => {
-    const activeTasks = tasks.filter((task) => !task.completed);
+    const activeTasks = tasks.filter((task) => isTask(task) && !task.completed);
 
     if (activeTasks.length === 0) return null;
 
@@ -178,9 +269,9 @@ function App() {
   };
 
   const handleGeneratePlan = async () => {
-    const activeTasks = tasks.filter((t) => !t.completed);
+    const activeItems = tasks.filter((t) => !t.completed);
 
-    if (activeTasks.length === 0) {
+    if (activeItems.length === 0) {
       setDailyPlan("No active tasks available.");
       return;
     }
@@ -207,7 +298,7 @@ function App() {
     setLoadingTask(task.id);
 
     try {
-      const response = await breakdownTask(task.task);
+      const response = await breakdownTask(getTitle(task));
       setBreakdowns((prev) => ({
         ...prev,
         [task.id]: response,
@@ -227,25 +318,34 @@ function App() {
     totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
   const filteredTasks = tasks.filter((t) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (query) {
+      const title = getTitle(t).toLowerCase();
+      const itemLocation = (t.location || "").toLowerCase();
+      if (!title.includes(query) && !itemLocation.includes(query)) {
+        return false;
+      }
+    }
+
     if (filter === "all") return true;
-    if (filter === "today") return getStatus(t.deadline) === "DUE TODAY";
+    if (filter === "today") {
+      if (isEvent(t)) return isSameDay(t.eventDate);
+      return getStatus(t.deadline) === "DUE TODAY";
+    }
     if (filter === "this-week") {
+      if (isEvent(t)) return isWithinDays(t.eventDate, 7);
       const today = new Date();
       const due = new Date(t.deadline);
       const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
       return diff >= 0 && diff <= 7;
     }
     if (filter === "this-month") {
-      const today = new Date();
-      const due = new Date(t.deadline);
-      return (
-        due.getMonth() === today.getMonth() &&
-        due.getFullYear() === today.getFullYear()
-      );
+      const dateStr = isEvent(t) ? t.eventDate : t.deadline;
+      return isThisMonth(dateStr);
     }
     if (filter === "completed") return t.completed;
     if (filter === "overdue")
-      return !t.completed && getStatus(t.deadline) === "OVERDUE";
+      return isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE";
     return true;
   });
 
@@ -255,18 +355,24 @@ function App() {
     Low: 2,
   };
 
-  const sortedTasks = [...filteredTasks].sort((a, b) => {
-    if (a.completed !== b.completed) {
-      return a.completed ? 1 : -1;
-    }
+  const getSortGroup = (item) => {
+    if (isEvent(item)) return item.completed ? 3 : 1;
+    if (item.completed) return 2;
+    return 0;
+  };
 
-    if (!a.completed && !b.completed) {
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    const groupA = getSortGroup(a);
+    const groupB = getSortGroup(b);
+    if (groupA !== groupB) return groupA - groupB;
+
+    if (!a.completed && !b.completed && isTask(a) && isTask(b)) {
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
         return priorityOrder[a.priority] - priorityOrder[b.priority];
       }
     }
 
-    return new Date(a.deadline) - new Date(b.deadline);
+    return new Date(getItemDate(a)) - new Date(getItemDate(b));
   });
 
   return (
@@ -286,33 +392,93 @@ function App() {
         <h2 className="section-title">Add Task</h2>
 
         <div className="task-form">
+          <div className="type-selector">
+            <span className="type-selector__label">Type</span>
+            <label className="type-selector__option">
+              <input
+                type="radio"
+                name="itemType"
+                value="task"
+                checked={itemType === "task"}
+                onChange={() => setItemType("task")}
+              />
+              Task
+            </label>
+            <label className="type-selector__option">
+              <input
+                type="radio"
+                name="itemType"
+                value="event"
+                checked={itemType === "event"}
+                onChange={() => setItemType("event")}
+              />
+              Event
+            </label>
+          </div>
+
           <input
             type="text"
-            placeholder="Task Name"
+            placeholder={itemType === "task" ? "Task Name" : "Event Name"}
             value={task}
             onChange={(e) => setTask(e.target.value)}
             className="input"
           />
 
-          <input
-            type="date"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-            className="input"
-          />
+          {itemType === "task" ? (
+            <>
+              <input
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="input"
+              />
 
-          <select
-            value={priority}
-            onChange={(e) => setPriority(e.target.value)}
-            className="select"
-          >
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </select>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="select"
+              >
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </>
+          ) : (
+            <>
+              <input
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                className="input"
+                placeholder="Event Date"
+              />
+
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="input"
+              />
+
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="input"
+              />
+
+              <input
+                type="text"
+                placeholder="Location (optional)"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="input"
+              />
+            </>
+          )}
 
           <button onClick={addTask} className="btn btn-primary">
-            Add Task
+            {itemType === "task" ? "Add Task" : "Add Event"}
           </button>
         </div>
       </section>
@@ -322,7 +488,7 @@ function App() {
       <section className="stats-grid">
         <div className="stat-card">
           <h3 className="stat-card__number">
-            {tasks.filter((t) => !t.completed).length}
+            {tasks.filter((t) => isTask(t) && !t.completed).length}
           </h3>
           <p className="stat-card__label">Total Tasks</p>
         </div>
@@ -331,7 +497,10 @@ function App() {
           <h3 className="stat-card__number stat-card__number--danger">
             {
               tasks.filter(
-                (t) => !t.completed && getStatus(t.deadline) === "OVERDUE"
+                (t) =>
+                  isTask(t) &&
+                  !t.completed &&
+                  getStatus(t.deadline) === "OVERDUE"
               ).length
             }
           </h3>
@@ -342,7 +511,10 @@ function App() {
           <h3 className="stat-card__number stat-card__number--warning">
             {
               tasks.filter(
-                (t) => !t.completed && getStatus(t.deadline) === "DUE TODAY"
+                (t) =>
+                  isTask(t) &&
+                  !t.completed &&
+                  getStatus(t.deadline) === "DUE TODAY"
               ).length
             }
           </h3>
@@ -356,7 +528,7 @@ function App() {
         <div className="focus-card">
           {topTask && <div className="focus-card__icon">🎯</div>}
           <strong className="focus-card__text">
-            {topTask ? `Focus on: ${topTask.task}` : "No tasks added yet"}
+            {topTask ? `Focus on: ${getTitle(topTask)}` : "No tasks added yet"}
           </strong>
         </div>
       </section>
@@ -403,6 +575,14 @@ function App() {
       <hr className="divider" />
 
       <section className="tasks-section">
+        <input
+          type="text"
+          placeholder="🔍 Search tasks or events..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="input task-search"
+        />
+
         <div className="task-filters">
           {[
             { key: "all", label: "All" },
@@ -430,71 +610,107 @@ function App() {
             <h3 className="empty-state__title">You're all caught up!</h3>
             <p className="empty-state__message">Add a task to get started.</p>
           </div>
+        ) : sortedTasks.length === 0 ? (
+          <div className="empty-state">
+            <h3 className="empty-state__title">No matching tasks or events.</h3>
+          </div>
         ) : (
-          sortedTasks.map((t) => (
-            <div
-              key={t.id}
-              className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
-            >
-              <h3 className="task-card__title">{t.task}</h3>
-              <p className="task-card__meta">Deadline: {t.deadline}</p>
+          sortedTasks.map((t) =>
+            isEvent(t) ? (
+              <div
+                key={t.id}
+                className={`task-card event-card${t.completed ? " task-card--completed" : ""}`}
+              >
+                <h3 className="task-card__title">🎉 {getTitle(t)}</h3>
+                <p className="task-card__meta">{formatEventDate(t.eventDate)}</p>
+                <p className="task-card__meta">
+                  🕒 {formatTime(t.startTime)} - {formatTime(t.endTime)}
+                </p>
+                {t.location && (
+                  <p className="task-card__meta">📍 {t.location}</p>
+                )}
 
-              <div className="task-card__badges">
-                <span
-                  className={`badge badge-priority badge-priority--${t.priority.toLowerCase()}`}
-                >
-                  Priority: {t.priority}
-                </span>
+                <div className="task-card__actions">
+                  <button
+                    onClick={() => toggleComplete(t.id)}
+                    className="btn btn-secondary"
+                  >
+                    {t.completed ? "Undo" : "Complete"}
+                  </button>
 
-                <span
-                  className={`badge badge-status badge-status--${getStatus(t.deadline).toLowerCase().replace(/ /g, "-")}`}
-                >
-                  Status: {getStatus(t.deadline)}
-                </span>
-              </div>
-
-              <div className="task-card__actions">
-                <button
-                  onClick={() => toggleComplete(t.id)}
-                  className="btn btn-secondary"
-                >
-                  {t.completed ? "Undo" : "Complete"}
-                </button>
-
-                <button
-                  onClick={() => deleteTask(t.id)}
-                  className="btn btn-danger"
-                >
-                  Delete
-                </button>
-
-                <button
-                  onClick={() => handleBreakdown(t)}
-                  className="btn btn-secondary"
-                  disabled={loadingTask === t.id}
-                >
-                  {loadingTask === t.id
-                    ? "Generating..."
-                    : breakdowns[t.id]
-                      ? visibleBreakdowns[t.id]
-                        ? "✨ Hide Breakdown"
-                        : "✨ Show Breakdown"
-                      : "✨ Break Down Task"}
-                </button>
-              </div>
-
-              {loadingTask === t.id && (
-                <p className="task-card__meta">Generating AI breakdown...</p>
-              )}
-
-              {visibleBreakdowns[t.id] && breakdowns[t.id] && (
-                <div className="task-card__meta">
-                  <strong>AI Breakdown</strong>
-                  <pre>{breakdowns[t.id]}</pre>
+                  <button
+                    onClick={() => deleteTask(t.id)}
+                    className="btn btn-danger"
+                  >
+                    Delete
+                  </button>
                 </div>
-              )}
-            </div>
-          ))
+              </div>
+            ) : (
+              <div
+                key={t.id}
+                className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
+              >
+                <h3 className="task-card__title">{getTitle(t)}</h3>
+                <p className="task-card__meta">Deadline: {t.deadline}</p>
+
+                <div className="task-card__badges">
+                  <span
+                    className={`badge badge-priority badge-priority--${t.priority.toLowerCase()}`}
+                  >
+                    Priority: {t.priority}
+                  </span>
+
+                  <span
+                    className={`badge badge-status badge-status--${getStatus(t.deadline).toLowerCase().replace(/ /g, "-")}`}
+                  >
+                    Status: {getStatus(t.deadline)}
+                  </span>
+                </div>
+
+                <div className="task-card__actions">
+                  <button
+                    onClick={() => toggleComplete(t.id)}
+                    className="btn btn-secondary"
+                  >
+                    {t.completed ? "Undo" : "Complete"}
+                  </button>
+
+                  <button
+                    onClick={() => deleteTask(t.id)}
+                    className="btn btn-danger"
+                  >
+                    Delete
+                  </button>
+
+                  <button
+                    onClick={() => handleBreakdown(t)}
+                    className="btn btn-secondary"
+                    disabled={loadingTask === t.id}
+                  >
+                    {loadingTask === t.id
+                      ? "Generating..."
+                      : breakdowns[t.id]
+                        ? visibleBreakdowns[t.id]
+                          ? "✨ Hide Breakdown"
+                          : "✨ Show Breakdown"
+                        : "✨ Break Down Task"}
+                  </button>
+                </div>
+
+                {loadingTask === t.id && (
+                  <p className="task-card__meta">Generating AI breakdown...</p>
+                )}
+
+                {visibleBreakdowns[t.id] && breakdowns[t.id] && (
+                  <div className="task-card__meta">
+                    <strong>AI Breakdown</strong>
+                    <pre>{breakdowns[t.id]}</pre>
+                  </div>
+                )}
+              </div>
+            )
+          )
         )}
       </section>
 

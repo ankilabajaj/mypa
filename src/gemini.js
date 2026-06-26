@@ -76,20 +76,38 @@ export async function generateDailyPlan(tasks) {
     return "Gemini API key not found.";
   }
 
-  const activeTasks = tasks.filter((task) => !task.completed);
+  const getTitle = (item) => item.title || item.task || "";
+
+  const formatEventDate = (dateStr) => {
+    const date = new Date(`${dateStr}T00:00:00`);
+    return date.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  };
+
+  const activeItems = tasks.filter((item) => !item.completed);
+  const activeEvents = activeItems.filter((item) => item.type === "event");
+  const activeTasks = activeItems.filter((item) => item.type !== "event");
+
+  const eventList = activeEvents
+    .map(
+      (event) =>
+        `EVENT\n\n${getTitle(event)}\n\n${formatEventDate(event.eventDate)}\n\n${event.startTime}-${event.endTime}`
+    )
+    .join("\n\n");
 
   const taskList = activeTasks
     .map(
       (task) =>
-        `* ${task.task}\n  Priority: ${task.priority}\n  Status: ${getTaskStatus(task.deadline)}`
+        `TASK\n\n${getTitle(task)}\n\n${task.priority}\n\n${getTaskStatus(task.deadline)}`
     )
     .join("\n\n");
 
+  const itemsList = [eventList, taskList].filter(Boolean).join("\n\n");
+
   const prompt = `You are a productivity assistant.
 
-Here are my pending tasks:
+Here are my pending items:
 
-${taskList}
+${itemsList}
 
 Create an optimized schedule for today.
 
