@@ -941,4 +941,72 @@
       max-width: 100%;
     }
   }
+
+  /* ============================================
+     AI Rescue Mode
+     ============================================ */
+
+  .rescue-section {
+    margin-bottom: var(--space-6);
+    width: 100%;
+  }
+
+  .rescue-title {
+    text-align: center;
+  }
+
+  .rescue-card {
+    background: linear-gradient(135deg, #fff5f5 0%, #fff7ed 100%);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    box-shadow: var(--shadow-md);
+    text-align: center;
+  }
+
+  .rescue-card--on-track {
+    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+    border-color: #bbf7d0;
+  }
+
+  .rescue-text {
+    color: var(--color-text-primary);
+    font-size: var(--font-size-base);
+    line-height: 1.6;
+    margin: 0 0 var(--space-4);
+    white-space: pre-wrap;
+  }
+
+  .rescue-card__plan {
+    margin-top: var(--space-5);
+    padding: var(--space-5);
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border-light);
+    text-align: left;
+  }
+
+  .rescue-card__plan .rescue-text {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
+
+  .rescue-button {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ff9f43 100%);
+    color: #ffffff;
+    border: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .rescue-button:hover {
+    background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .rescue-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
   

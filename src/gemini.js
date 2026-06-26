@@ -158,3 +158,119 @@ Include estimated times and logical ordering.`;
     return "Unable to generate daily plan right now.";
   }
 }
+
+export async function generateRescuePlan(tasks, productivityScore) {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const model = "gemini-3.1-flash-lite";
+
+  console.log("Gemini model:", model);
+  console.log("Gemini API key detected:", Boolean(apiKey));
+
+  if (!apiKey) {
+    return "Gemini API key not found.";
+  }
+
+  const getTitle = (item) => item.title || item.task || "";
+
+  const overdueTasks = tasks.filter(
+    (task) =>
+      task.type !== "event" &&
+      !task.completed &&
+      getTaskStatus(task.deadline) === "OVERDUE"
+  );
+
+  const highPriorityTasks = tasks.filter(
+    (task) =>
+      task.type !== "event" && !task.completed && task.priority === "High"
+  );
+
+  const upcomingEvents = tasks.filter(
+    (item) => item.type === "event" && !item.completed
+  );
+
+  const remainingTasks = tasks.filter(
+    (task) => task.type !== "event" && !task.completed
+  );
+
+  const formatList = (items, formatter) =>
+    items.length > 0
+      ? items.map(formatter).join("\n")
+      : "None";
+
+  const prompt = `You are an AI productivity coach.
+
+The user has fallen behind.
+
+Current productivity:
+${productivityScore}%
+
+Overdue Tasks:
+${formatList(overdueTasks, (task) => `- ${getTitle(task)} (${getTaskStatus(task.deadline)})`)}
+
+High Priority Tasks:
+${formatList(highPriorityTasks, (task) => `- ${getTitle(task)} (${getTaskStatus(task.deadline)})`)}
+
+Upcoming Events:
+${formatList(upcomingEvents, (event) => `- ${getTitle(event)} on ${event.eventDate} ${event.startTime}-${event.endTime}`)}
+
+Remaining Tasks:
+${formatList(remainingTasks, (task) => `- ${getTitle(task)} | ${task.priority} | ${getTaskStatus(task.deadline)}`)}
+
+Create a recovery plan.
+
+Include:
+
+1. Short explanation of the current situation.
+2. Which low priority work can safely wait.
+3. Which tasks should be completed first.
+4. Best execution order.
+5. Estimated recovery time.
+6. One short motivational paragraph.
+
+Keep the answer under 250 words.
+
+Use bullet points.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.error("Gemini request failed");
+      console.error("Gemini status:", response.status);
+      console.error("Gemini response body:", responseText);
+      throw new Error(`Gemini request failed with status ${response.status}`);
+    }
+
+    const data = JSON.parse(responseText);
+    console.log("Gemini successful response:", data);
+
+    return (
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Unable to generate rescue plan right now."
+    );
+  } catch (error) {
+    console.error("Gemini error:", error);
+    return "Unable to generate rescue plan right now.";
+  }
+}

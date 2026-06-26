@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
-import { breakdownTask, generateDailyPlan } from "./gemini";
+import { breakdownTask, generateDailyPlan, generateRescuePlan } from "./gemini";
 
 const isEvent = (item) => item.type === "event";
 const isTask = (item) => !isEvent(item);
@@ -71,6 +71,9 @@ function App() {
   const [planLoading, setPlanLoading] = useState(false);
   const [filter, setFilter] = useState("all");
   const [streak, setStreak] = useState(0);
+  const [rescuePlan, setRescuePlan] = useState("");
+  const [rescueVisible, setRescueVisible] = useState(false);
+  const [rescueLoading, setRescueLoading] = useState(false);
 
   useEffect(() => {
     const savedTasks = (JSON.parse(localStorage.getItem("tasks")) || []).map(
@@ -86,6 +89,8 @@ function App() {
     const savedBreakdowns =
       JSON.parse(localStorage.getItem("taskBreakdowns")) || {};
     setBreakdowns(savedBreakdowns);
+    const savedRescuePlan = localStorage.getItem("rescuePlan") || "";
+    setRescuePlan(savedRescuePlan);
     setTasksLoaded(true);
   }, []);
 
@@ -98,6 +103,11 @@ function App() {
     if (!tasksLoaded) return;
     localStorage.setItem("taskBreakdowns", JSON.stringify(breakdowns));
   }, [breakdowns, tasksLoaded]);
+
+  useEffect(() => {
+    if (!tasksLoaded) return;
+    localStorage.setItem("rescuePlan", rescuePlan);
+  }, [rescuePlan, tasksLoaded]);
 
   useEffect(() => {
     prioritizeTasks();
@@ -375,6 +385,38 @@ function App() {
     return new Date(getItemDate(a)) - new Date(getItemDate(b));
   });
 
+  const overdueCount = tasks.filter(
+    (t) =>
+      isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE"
+  ).length;
+  const highPriorityIncomplete = tasks.filter(
+    (t) => isTask(t) && !t.completed && t.priority === "High"
+  ).length;
+  const todayStr = new Date().toISOString().split("T")[0];
+  const completedToday = localStorage.getItem("lastCompletionDate") === todayStr;
+  const rescueNeeded =
+    overdueCount >= 3 ||
+    highPriorityIncomplete >= 5 ||
+    productivityScore < 40 ||
+    !completedToday;
+
+  const handleRescuePlan = async () => {
+    if (rescuePlan) {
+      setRescueVisible((prev) => !prev);
+      return;
+    }
+
+    setRescueLoading(true);
+
+    try {
+      const response = await generateRescuePlan(tasks, productivityScore);
+      setRescuePlan(response);
+      setRescueVisible(true);
+    } finally {
+      setRescueLoading(false);
+    }
+  };
+
   return (
     <div className="dashboard">
       <header className="hero">
@@ -603,6 +645,50 @@ function App() {
             {topTask ? `Focus on: ${getTitle(topTask)}` : "No tasks added yet"}
           </strong>
         </div>
+      </section>
+
+      <section className="rescue-section">
+        <h2 className="section-title rescue-title">🚨 AI Rescue Mode</h2>
+
+        {rescueNeeded ? (
+          <div className="rescue-card">
+            <p className="rescue-text">
+              You're falling behind.
+              <br />
+              AI has prepared a recovery plan.
+            </p>
+
+            <button
+              onClick={handleRescuePlan}
+              className="btn rescue-button"
+              disabled={rescueLoading}
+            >
+              {rescueLoading
+                ? "Generating..."
+                : rescuePlan
+                  ? rescueVisible
+                    ? "🙈 Hide Rescue Plan"
+                    : "👀 Show Rescue Plan"
+                  : "🚨 Generate Rescue Plan"}
+            </button>
+
+            {rescueVisible && rescuePlan && (
+              <div className="rescue-card__plan">
+                <pre className="rescue-text">{rescuePlan}</pre>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rescue-card rescue-card--on-track">
+            <p className="rescue-text">
+              🎉 You're on track!
+              <br />
+              No rescue plan needed today.
+              <br />
+              Keep it up!
+            </p>
+          </div>
+        )}
       </section>
 
       <hr className="divider" />
