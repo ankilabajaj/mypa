@@ -22,6 +22,9 @@ function App() {
     setTasks(savedTasks);
     const savedStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
     setStreak(savedStreak);
+    const savedBreakdowns =
+      JSON.parse(localStorage.getItem("taskBreakdowns")) || {};
+    setBreakdowns(savedBreakdowns);
     setTasksLoaded(true);
   }, []);
 
@@ -29,6 +32,11 @@ function App() {
     if (!tasksLoaded) return;
     localStorage.setItem("tasks", JSON.stringify(tasks));
   }, [tasks, tasksLoaded]);
+
+  useEffect(() => {
+    if (!tasksLoaded) return;
+    localStorage.setItem("taskBreakdowns", JSON.stringify(breakdowns));
+  }, [breakdowns, tasksLoaded]);
 
   useEffect(() => {
     prioritizeTasks();
@@ -241,6 +249,26 @@ function App() {
     return true;
   });
 
+  const priorityOrder = {
+    High: 0,
+    Medium: 1,
+    Low: 2,
+  };
+
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+
+    if (!a.completed && !b.completed) {
+      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      }
+    }
+
+    return new Date(a.deadline) - new Date(b.deadline);
+  });
+
   return (
     <div className="dashboard">
       <header className="hero">
@@ -403,7 +431,7 @@ function App() {
             <p className="empty-state__message">Add a task to get started.</p>
           </div>
         ) : (
-          filteredTasks.map((t) => (
+          sortedTasks.map((t) => (
             <div
               key={t.id}
               className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
