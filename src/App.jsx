@@ -74,6 +74,7 @@ function App() {
   const [rescuePlan, setRescuePlan] = useState("");
   const [rescueVisible, setRescueVisible] = useState(false);
   const [rescueLoading, setRescueLoading] = useState(false);
+  const [highlightedTaskId, setHighlightedTaskId] = useState(null);
 
   useEffect(() => {
     const savedTasks = (JSON.parse(localStorage.getItem("tasks")) || []).map(
@@ -365,16 +366,13 @@ function App() {
     Low: 2,
   };
 
-  const getSortGroup = (item) => {
-    if (isEvent(item)) return item.completed ? 3 : 1;
-    if (item.completed) return 2;
-    return 0;
-  };
-
   const sortedTasks = [...filteredTasks].sort((a, b) => {
-    const groupA = getSortGroup(a);
-    const groupB = getSortGroup(b);
-    if (groupA !== groupB) return groupA - groupB;
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1;
+    }
+
+    const dateDiff = new Date(getItemDate(a)) - new Date(getItemDate(b));
+    if (dateDiff !== 0) return dateDiff;
 
     if (!a.completed && !b.completed && isTask(a) && isTask(b)) {
       if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
@@ -382,7 +380,7 @@ function App() {
       }
     }
 
-    return new Date(getItemDate(a)) - new Date(getItemDate(b));
+    return 0;
   });
 
   const overdueCount = tasks.filter(
@@ -417,24 +415,91 @@ function App() {
     }
   };
 
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const getDueInText = (deadline) => {
+    const today = new Date();
+    const due = new Date(deadline);
+    const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+
+    if (diff < 0) {
+      const days = Math.abs(diff);
+      return `Overdue by ${days} day${days === 1 ? "" : "s"}`;
+    }
+    if (diff === 0) return "Due today";
+    return `Due in ${diff} day${diff === 1 ? "" : "s"}`;
+  };
+
+  const getPriorityLabel = (priority) =>
+    priority === "High" ? "Highest Priority" : `${priority} Priority`;
+
+  const scrollToTask = (id) => {
+    const element = document.getElementById(`task-${id}`);
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedTaskId(id);
+    setTimeout(() => setHighlightedTaskId(null), 2000);
+  };
+
+  const taskCount = tasks.filter((t) => isTask(t) && !t.completed).length;
+  const eventCount = tasks.filter((t) => isEvent(t) && !t.completed).length;
+  const dueTodayCount = tasks.filter(
+    (t) =>
+      isTask(t) && !t.completed && getStatus(t.deadline) === "DUE TODAY"
+  ).length;
+
   return (
     <div className="dashboard">
       <header className="hero">
-        <div className="hero__stats">
-          <div className="hero__stat-card">
-            <span className="hero__stat-label">🔥 Streak</span>
-            <span className="hero__stat-value">{streak} Days</span>
+        <div className="hero__inner">
+          <div className="hero__content">
+            <h1 className="hero__title">MyPA</h1>
+            <p className="hero__subtitle">
+              Your AI Personal Assistant for Getting Things Done
+            </p>
           </div>
-          <div className="hero__stat-card">
-            <span className="hero__stat-label">⚡ Productivity</span>
-            <span className="hero__stat-value">{productivityScore}%</span>
+
+          <div className="hero__widgets">
+            <div className="hero__widget">
+              <span className="hero__widget-icon">🔥</span>
+              <div className="hero__widget-body">
+                <span className="hero__widget-label">Streak</span>
+                <span className="hero__widget-value">{streak} Days</span>
+              </div>
+            </div>
+            <div className="hero__widget">
+              <span className="hero__widget-icon">⚡</span>
+              <div className="hero__widget-body">
+                <span className="hero__widget-label">Productivity</span>
+                <span className="hero__widget-value">{productivityScore}%</span>
+              </div>
+            </div>
           </div>
         </div>
-        <h1 className="hero__title">MyPA</h1>
-        <p className="hero__subtitle">
-          Your AI Personal Assistant for Getting Things Done
-        </p>
       </header>
+
+      <nav className="sticky-nav" aria-label="Page sections">
+        {[
+          { id: "dashboard", label: "Dashboard" },
+          { id: "focus-section", label: "Today's Focus" },
+          { id: "rescue-section", label: "AI Rescue Mode" },
+          { id: "smart-recommendation", label: "Smart Recommendation" },
+          { id: "daily-planner", label: "AI Daily Planner" },
+          { id: "tasks-section", label: "My Tasks" },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            className="sticky-nav__link"
+            onClick={() => scrollToSection(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
       <section className="card task-form-card">
         <h2 className="section-title">Add Task</h2>
@@ -599,64 +664,80 @@ function App() {
 
       <hr className="divider" />
 
-      <section className="stats-grid">
+      <section id="dashboard" className="stats-grid">
         <div className="stat-card">
-          <h3 className="stat-card__number">
-            {tasks.filter((t) => isTask(t) && !t.completed).length}
-          </h3>
-          <p className="stat-card__label">Total Tasks</p>
+          <h3 className="stat-card__number">{taskCount}</h3>
+          <p className="stat-card__label">Tasks</p>
+        </div>
+
+        <div className="stat-card">
+          <h3 className="stat-card__number">{eventCount}</h3>
+          <p className="stat-card__label">Events</p>
         </div>
 
         <div className="stat-card">
           <h3 className="stat-card__number stat-card__number--danger">
-            {
-              tasks.filter(
-                (t) =>
-                  isTask(t) &&
-                  !t.completed &&
-                  getStatus(t.deadline) === "OVERDUE"
-              ).length
-            }
+            {overdueCount}
           </h3>
           <p className="stat-card__label">Overdue</p>
         </div>
 
         <div className="stat-card">
           <h3 className="stat-card__number stat-card__number--warning">
-            {
-              tasks.filter(
-                (t) =>
-                  isTask(t) &&
-                  !t.completed &&
-                  getStatus(t.deadline) === "DUE TODAY"
-              ).length
-            }
+            {dueTodayCount}
           </h3>
           <p className="stat-card__label">Due Today</p>
         </div>
       </section>
 
-      <section className="focus-section">
+      <section id="focus-section" className="focus-section">
         <h2 className="section-title">Today's Focus</h2>
 
         <div className="focus-card">
-          {topTask && <div className="focus-card__icon">🎯</div>}
-          <strong className="focus-card__text">
-            {topTask ? `Focus on: ${getTitle(topTask)}` : "No tasks added yet"}
-          </strong>
+          {topTask ? (
+            <>
+              <div className="focus-card__icon">🎯</div>
+              <p className="focus-card__heading">Today's Focus</p>
+              <strong className="focus-card__task-name">
+                Complete {getTitle(topTask)}
+              </strong>
+              <p className="focus-card__detail">
+                {getPriorityLabel(topTask.priority)}
+              </p>
+              <p className="focus-card__detail">
+                {getDueInText(topTask.deadline)}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary focus-card__view-btn"
+                onClick={() => scrollToTask(topTask.id)}
+              >
+                View Task
+              </button>
+            </>
+          ) : (
+            <strong className="focus-card__text">No tasks added yet</strong>
+          )}
         </div>
       </section>
 
-      <section className="rescue-section">
+      <section id="rescue-section" className="rescue-section">
         <h2 className="section-title rescue-title">🚨 AI Rescue Mode</h2>
 
         {rescueNeeded ? (
           <div className="rescue-card">
-            <p className="rescue-text">
-              You're falling behind.
-              <br />
-              AI has prepared a recovery plan.
+            <p className="rescue-text rescue-text--status">
+              Status: You're falling behind.
             </p>
+
+            <div className="rescue-card__stats">
+              <span className="rescue-card__stat">
+                {overdueCount} overdue task{overdueCount === 1 ? "" : "s"}
+              </span>
+              <span className="rescue-card__stat">
+                {productivityScore}% productivity
+              </span>
+            </div>
 
             <button
               onClick={handleRescuePlan}
@@ -667,9 +748,9 @@ function App() {
                 ? "Generating..."
                 : rescuePlan
                   ? rescueVisible
-                    ? "🙈 Hide Rescue Plan"
-                    : "👀 Show Rescue Plan"
-                  : "🚨 Generate Rescue Plan"}
+                    ? "Hide Recovery Plan"
+                    : "Regenerate Recovery Plan"
+                  : "Generate Recovery Plan"}
             </button>
 
             {rescueVisible && rescuePlan && (
@@ -695,7 +776,7 @@ function App() {
 
       {recommendation && (
         <>
-          <section className="recommendation-section">
+          <section id="smart-recommendation" className="recommendation-section">
             <h2 className="section-title">🧠 Smart Recommendation</h2>
 
             <div className="recommendation-card">
@@ -707,12 +788,19 @@ function App() {
         </>
       )}
 
-      <section className="recommendation-section">
+      <section id="daily-planner" className="recommendation-section daily-planner-section">
         <h2 className="section-title">✨ AI Daily Planner</h2>
+
+        {dailyPlan && (
+          <div className="recommendation-card daily-planner-card">
+            <strong>Generated Daily Plan</strong>
+            <pre className="recommendation-card__text">{dailyPlan}</pre>
+          </div>
+        )}
 
         <button
           onClick={handleGeneratePlan}
-          className="btn btn-primary"
+          className="btn btn-primary daily-planner-button"
           disabled={planLoading}
         >
           {planLoading
@@ -721,18 +809,11 @@ function App() {
               ? "🔄 Regenerate Plan"
               : "✨ Generate Today's Plan"}
         </button>
-
-        {dailyPlan && (
-          <div className="recommendation-card">
-            <strong>Generated Daily Plan</strong>
-            <pre className="recommendation-card__text">{dailyPlan}</pre>
-          </div>
-        )}
       </section>
 
       <hr className="divider" />
 
-      <section className="tasks-section">
+      <section id="tasks-section" className="tasks-section">
         <input
           type="text"
           placeholder="🔍 Search tasks or events..."
@@ -777,11 +858,12 @@ function App() {
             isEvent(t) ? (
               <div
                 key={t.id}
-                className={`task-card event-card${t.completed ? " task-card--completed" : ""}`}
+                id={`task-${t.id}`}
+                className={`task-card event-card${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
               >
                 <div className="task-card__header">
                   <span className="item-type-badge item-type-badge--event">EVENT</span>
-                  <h3 className="task-card__title">🎉 {getTitle(t)}</h3>
+                  <h3 className="task-card__title">{getTitle(t)}</h3>
                 </div>
                 <p className="task-card__meta">📅 {formatEventDate(t.eventDate)}</p>
                 <p className="task-card__meta">
@@ -810,7 +892,8 @@ function App() {
             ) : (
               <div
                 key={t.id}
-                className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}`}
+                id={`task-${t.id}`}
+                className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
               >
                 <div className="task-card__header">
                   <span className="item-type-badge item-type-badge--task">TASK</span>
