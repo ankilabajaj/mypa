@@ -224,7 +224,10 @@ Example:
   }
 }
 
-export async function generateDailyPlan(tasks) {
+export async function generateDailyPlan(
+  tasks,
+  { productivityScore, overdueCount, dueTodayCount } = {}
+) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const model = "gemini-3.1-flash-lite";
 
@@ -236,43 +239,105 @@ export async function generateDailyPlan(tasks) {
   }
 
   const getTitle = (item) => item.title || item.task || "";
+  const getNotes = (item) => item.description || item.notes || "";
 
-  const formatEventDate = (dateStr) => {
-    const date = new Date(`${dateStr}T00:00:00`);
-    return date.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+  const isToday = (dateStr) => {
+    const today = new Date();
+    const d = new Date(`${dateStr}T00:00:00`);
+    return (
+      d.getDate() === today.getDate() &&
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
+    );
   };
 
   const activeItems = tasks.filter((item) => !item.completed);
-  const activeEvents = activeItems.filter((item) => item.type === "event");
+  const todaysEvents = activeItems.filter(
+    (item) => item.type === "event" && isToday(item.eventDate)
+  );
   const activeTasks = activeItems.filter((item) => item.type !== "event");
 
-  const eventList = activeEvents
-    .map(
-      (event) =>
-        `EVENT\n\n${getTitle(event)}\n\n${formatEventDate(event.eventDate)}\n\n${event.startTime}-${event.endTime}`
-    )
-    .join("\n\n");
+  const now = new Date();
+  const currentDate = now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const currentTime = now.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dayOfWeek = now.toLocaleDateString("en-GB", { weekday: "long" });
 
-  const taskList = activeTasks
-    .map(
-      (task) =>
-        `TASK\n\n${getTitle(task)}\n\n${task.priority}\n\n${getTaskStatus(task.deadline)}`
-    )
-    .join("\n\n");
+  const eventList =
+    todaysEvents.length > 0
+      ? todaysEvents
+          .map((event) => {
+            const notes = getNotes(event);
+            return `- ${getTitle(event)}
+  Start: ${event.startTime}
+  End: ${event.endTime}${notes ? `\n  Description: ${notes}` : ""}`;
+          })
+          .join("\n\n")
+      : "None scheduled for today.";
 
-  const itemsList = [eventList, taskList].filter(Boolean).join("\n\n");
+  const taskList =
+    activeTasks.length > 0
+      ? activeTasks
+          .map((task) => {
+            const notes = getNotes(task);
+            return `- ${getTitle(task)}
+  Priority: ${task.priority}
+  Deadline: ${task.deadline}
+  Status: ${formatTaskStatusLabel(task.deadline)}${notes ? `\n  Description: ${notes}` : ""}`;
+          })
+          .join("\n\n")
+      : "None remaining.";
 
-  const prompt = `You are a productivity assistant.
+  const dashboardMetrics = [
+    productivityScore !== undefined
+      ? `Productivity: ${productivityScore}%`
+      : null,
+    overdueCount !== undefined ? `Overdue tasks: ${overdueCount}` : null,
+    dueTodayCount !== undefined ? `Due today: ${dueTodayCount}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
-Here are my pending items:
+  const prompt = `You are a professional AI productivity assistant.
 
-${itemsList}
+You are creating a realistic schedule for the REMAINDER of today.
 
-Create an optimized schedule for today.
+Current date:
+${currentDate}
 
-Return only a clean schedule using bullet points.
+Current day of week:
+${dayOfWeek}
 
-Include estimated times and logical ordering.`;
+Current local time:
+${currentTime}
+${dashboardMetrics ? `\nDashboard summary:\n${dashboardMetrics}` : ""}
+
+Current events for today:
+${eventList}
+
+Current incomplete tasks:
+${taskList}
+
+Rules:
+- Never schedule anything before the current local time.
+- Start planning from the current time onward.
+- Respect existing events and never schedule tasks during event times.
+- Schedule higher-priority and more urgent tasks first.
+- Keep the schedule realistic.
+- Include short breaks between long work sessions when appropriate.
+- Include meal breaks only if appropriate for the current time of day.
+- Leave small buffer periods before important events when appropriate.
+- If very little time remains today, recommend only the most important tasks.
+- If there are no remaining tasks, recommend planning tomorrow or taking a well-deserved break.
+
+Return the plan in clean Markdown exactly as expected by the existing UI.`;
 
   try {
     const response = await fetch(

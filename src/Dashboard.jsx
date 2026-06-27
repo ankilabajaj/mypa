@@ -78,7 +78,6 @@ function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tasks, setTasks] = useState([]);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [recommendation, setRecommendation] = useState("");
   const [breakdowns, setBreakdowns] = useState({});
   const [visibleBreakdowns, setVisibleBreakdowns] = useState({});
   const [loadingTask, setLoadingTask] = useState(null);
@@ -151,10 +150,6 @@ function Dashboard() {
     if (!settingsLoaded || !uid) return;
     saveSettings(uid, { rescuePlan });
   }, [rescuePlan, settingsLoaded, uid]);
-
-  useEffect(() => {
-    prioritizeTasks();
-  }, [tasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -247,21 +242,6 @@ function Dashboard() {
 
     setTasks(updatedTasks);
     deleteTaskFromFirestore(uid, id);
-  };
-
-  const prioritizeTasks = () => {
-    const topTask = getTopTask();
-
-    if (!topTask) {
-      setRecommendation("No tasks available.");
-      return;
-    }
-
-    setRecommendation(
-      `Focus on "${getTitle(topTask)}" because it is ${
-        topTask.priority
-      } priority and currently ${getStatus(topTask.deadline)}.`
-    );
   };
 
   const getStatus = (deadline) => {
@@ -383,7 +363,11 @@ function Dashboard() {
     setPlanLoading(true);
 
     try {
-      const response = await generateDailyPlan(tasks);
+      const response = await generateDailyPlan(tasks, {
+        productivityScore,
+        overdueCount,
+        dueTodayCount,
+      });
       setDailyPlan(response);
     } finally {
       setPlanLoading(false);
@@ -491,12 +475,7 @@ function Dashboard() {
     productivityScore < 40 ||
     !completedToday;
 
-  const handleRescuePlan = async () => {
-    if (rescuePlan) {
-      setRescueVisible((prev) => !prev);
-      return;
-    }
-
+  const handleGenerateRescuePlan = async () => {
     setRescueLoading(true);
 
     try {
@@ -506,6 +485,22 @@ function Dashboard() {
     } finally {
       setRescueLoading(false);
     }
+  };
+
+  const handleRegenerateRescuePlan = async () => {
+    setRescueLoading(true);
+
+    try {
+      const response = await generateRescuePlan(tasks, productivityScore);
+      setRescuePlan(response);
+      setRescueVisible(true);
+    } finally {
+      setRescueLoading(false);
+    }
+  };
+
+  const handleToggleRescueVisibility = () => {
+    setRescueVisible((prev) => !prev);
   };
 
   const scrollToSection = (id) => {
@@ -602,7 +597,6 @@ function Dashboard() {
           { id: "dashboard", label: "Dashboard" },
           { id: "focus-section", label: "Today's Focus" },
           { id: "rescue-section", label: "AI Rescue Mode" },
-          { id: "smart-recommendation", label: "Smart Recommendation" },
           { id: "daily-planner", label: "AI Daily Planner" },
           { id: "tasks-section", label: "My Tasks" },
         ].map(({ id, label }) => (
@@ -850,19 +844,35 @@ function Dashboard() {
               </span>
             </div>
 
-            <button
-              onClick={handleRescuePlan}
-              className="btn rescue-button"
-              disabled={rescueLoading}
-            >
-              {rescueLoading
-                ? "Generating..."
-                : rescuePlan
-                  ? rescueVisible
-                    ? "Hide Recovery Plan"
-                    : "Regenerate Recovery Plan"
-                  : "Generate Recovery Plan"}
-            </button>
+            {!rescuePlan ? (
+              <button
+                onClick={handleGenerateRescuePlan}
+                className="btn rescue-button"
+                disabled={rescueLoading}
+              >
+                {rescueLoading ? "Generating..." : "Generate Recovery Plan"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleToggleRescueVisibility}
+                  className="btn rescue-button"
+                >
+                  {rescueVisible ? "Hide Recovery Plan" : "Show Recovery Plan"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRegenerateRescuePlan}
+                  className="btn rescue-button"
+                  disabled={rescueLoading}
+                >
+                  {rescueLoading
+                    ? "Generating..."
+                    : "Regenerate Recovery Plan"}
+                </button>
+              </>
+            )}
 
             {rescueVisible && rescuePlan && (
               <div className="rescue-card__plan">
@@ -884,20 +894,6 @@ function Dashboard() {
       </section>
 
       <hr className="divider" />
-
-      {recommendation && (
-        <>
-          <section id="smart-recommendation" className="recommendation-section">
-            <h2 className="section-title">🧠 Smart Recommendation</h2>
-
-            <div className="recommendation-card">
-              <p className="recommendation-card__text">{recommendation}</p>
-            </div>
-          </section>
-
-          <hr className="divider" />
-        </>
-      )}
 
       <section id="daily-planner" className="recommendation-section daily-planner-section">
         <h2 className="section-title">✨ AI Daily Planner</h2>
