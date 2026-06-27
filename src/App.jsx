@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import "./App.css";
 import { breakdownTask, generateDailyPlan, generateRescuePlan } from "./gemini";
+import {
+  subscribeToTasks,
+  fetchTasks,
+  createTask,
+  updateTask,
+  deleteTask as deleteTaskFromFirestore,
+  fetchSettings,
+  saveSettings,
+  migrateFromLocalStorage,
+} from "./services/firestoreService";
 
 const isEvent = (item) => item.type === "event";
 const isTask = (item) => !isEvent(item);
@@ -62,7 +72,7 @@ function App() {
   const [location, setLocation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [tasks, setTasks] = useState([]);
-  const [tasksLoaded, setTasksLoaded] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [recommendation, setRecommendation] = useState("");
   const [breakdowns, setBreakdowns] = useState({});
   const [visibleBreakdowns, setVisibleBreakdowns] = useState({});
@@ -71,44 +81,54 @@ function App() {
   const [planLoading, setPlanLoading] = useState(false);
   const [filter, setFilter] = useState("all");
   const [streak, setStreak] = useState(0);
+  const [lastCompletionDate, setLastCompletionDate] = useState("");
   const [rescuePlan, setRescuePlan] = useState("");
   const [rescueVisible, setRescueVisible] = useState(false);
   const [rescueLoading, setRescueLoading] = useState(false);
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
 
   useEffect(() => {
-    const savedTasks = (JSON.parse(localStorage.getItem("tasks")) || []).map(
-      (item) => ({
-        ...item,
-        type: item.type || "task",
-        title: item.title || item.task,
-      })
-    );
-    setTasks(savedTasks);
-    const savedStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
-    setStreak(savedStreak);
-    const savedBreakdowns =
-      JSON.parse(localStorage.getItem("taskBreakdowns")) || {};
-    setBreakdowns(savedBreakdowns);
-    const savedRescuePlan = localStorage.getItem("rescuePlan") || "";
-    setRescuePlan(savedRescuePlan);
-    setTasksLoaded(true);
+    let cancelled = false;
+
+    const init = async () => {
+      const existingTasks = await fetchTasks();
+      if (!cancelled && existingTasks.length === 0 && localStorage.getItem("tasks")) {
+        await migrateFromLocalStorage();
+      }
+
+      if (cancelled) return;
+
+      const settings = await fetchSettings();
+      if (!cancelled) {
+        setStreak(settings.streak || 0);
+        setLastCompletionDate(settings.lastCompletionDate || "");
+        setBreakdowns(settings.taskBreakdowns || {});
+        setRescuePlan(settings.rescuePlan || "");
+        setSettingsLoaded(true);
+      }
+    };
+
+    init();
+
+    const unsubscribe = subscribeToTasks((firestoreTasks) => {
+      setTasks(firestoreTasks);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    if (!tasksLoaded) return;
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-  }, [tasks, tasksLoaded]);
+    if (!settingsLoaded) return;
+    saveSettings({ taskBreakdowns: breakdowns });
+  }, [breakdowns, settingsLoaded]);
 
   useEffect(() => {
-    if (!tasksLoaded) return;
-    localStorage.setItem("taskBreakdowns", JSON.stringify(breakdowns));
-  }, [breakdowns, tasksLoaded]);
-
-  useEffect(() => {
-    if (!tasksLoaded) return;
-    localStorage.setItem("rescuePlan", rescuePlan);
-  }, [rescuePlan, tasksLoaded]);
+    if (!settingsLoaded) return;
+    saveSettings({ rescuePlan });
+  }, [rescuePlan, settingsLoaded]);
 
   useEffect(() => {
     prioritizeTasks();
@@ -133,6 +153,7 @@ function App() {
         (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
       );
       setTasks(updatedTasks);
+      createTask(newTask);
       setTask("");
       setDeadline("");
       setPriority("Medium");
@@ -157,6 +178,7 @@ function App() {
       (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
     );
     setTasks(updatedTasks);
+    createTask(newEvent);
     setTask("");
     setEventDate("");
     setStartTime("");
@@ -172,6 +194,7 @@ function App() {
     );
 
     setTasks(updatedTasks);
+    deleteTaskFromFirestore(id);
   };
 
   const prioritizeTasks = () => {
@@ -259,22 +282,21 @@ function App() {
     );
 
     setTasks(updatedTasks);
+    updateTask(id, { completed: !taskToToggle.completed });
 
     if (isCompleting) {
       const today = new Date().toISOString().split("T")[0];
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split("T")[0];
-      const lastCompletionDate = localStorage.getItem("lastCompletionDate");
 
       if (lastCompletionDate !== today) {
-        const currentStreak = parseInt(localStorage.getItem("streak"), 10) || 0;
         const newStreak =
-          lastCompletionDate === yesterdayStr ? currentStreak + 1 : 1;
+          lastCompletionDate === yesterdayStr ? streak + 1 : 1;
 
         setStreak(newStreak);
-        localStorage.setItem("streak", newStreak.toString());
-        localStorage.setItem("lastCompletionDate", today);
+        setLastCompletionDate(today);
+        saveSettings({ streak: newStreak, lastCompletionDate: today });
       }
     }
   };
@@ -391,7 +413,7 @@ function App() {
     (t) => isTask(t) && !t.completed && t.priority === "High"
   ).length;
   const todayStr = new Date().toISOString().split("T")[0];
-  const completedToday = localStorage.getItem("lastCompletionDate") === todayStr;
+  const completedToday = lastCompletionDate === todayStr;
   const rescueNeeded =
     overdueCount >= 3 ||
     highPriorityIncomplete >= 5 ||
