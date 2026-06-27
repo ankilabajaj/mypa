@@ -11,6 +11,8 @@ import {
   fetchSettings,
   saveSettings,
   migrateFromLocalStorage,
+  ensureUserExists,
+  migrateSharedDataToUser,
 } from "./services/firestoreService";
 
 const isEvent = (item) => item.type === "event";
@@ -64,6 +66,7 @@ const isThisMonth = (dateStr) => {
 
 function Dashboard() {
   const { user, logout } = useAuth();
+  const uid = user?.uid;
   const [task, setTask] = useState("");
   const [deadline, setDeadline] = useState("");
   const [priority, setPriority] = useState("Medium");
@@ -90,17 +93,30 @@ function Dashboard() {
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
+    if (!uid) return;
 
-    const init = async () => {
-      const existingTasks = await fetchTasks();
-      if (!cancelled && existingTasks.length === 0 && localStorage.getItem("tasks")) {
-        await migrateFromLocalStorage();
+    setSettingsLoaded(false);
+    setTasks([]);
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    const start = async () => {
+      await ensureUserExists(uid);
+      await migrateSharedDataToUser(uid);
+
+      const existingTasks = await fetchTasks(uid);
+      if (
+        !cancelled &&
+        existingTasks.length === 0 &&
+        localStorage.getItem("tasks")
+      ) {
+        await migrateFromLocalStorage(uid);
       }
 
       if (cancelled) return;
 
-      const settings = await fetchSettings();
+      const settings = await fetchSettings(uid);
       if (!cancelled) {
         setStreak(settings.streak || 0);
         setLastCompletionDate(settings.lastCompletionDate || "");
@@ -108,29 +124,31 @@ function Dashboard() {
         setRescuePlan(settings.rescuePlan || "");
         setSettingsLoaded(true);
       }
+
+      if (cancelled) return;
+
+      unsubscribe = subscribeToTasks(uid, (firestoreTasks) => {
+        setTasks(firestoreTasks);
+      });
     };
 
-    init();
-
-    const unsubscribe = subscribeToTasks((firestoreTasks) => {
-      setTasks(firestoreTasks);
-    });
+    start();
 
     return () => {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [uid]);
 
   useEffect(() => {
-    if (!settingsLoaded) return;
-    saveSettings({ taskBreakdowns: breakdowns });
-  }, [breakdowns, settingsLoaded]);
+    if (!settingsLoaded || !uid) return;
+    saveSettings(uid, { taskBreakdowns: breakdowns });
+  }, [breakdowns, settingsLoaded, uid]);
 
   useEffect(() => {
-    if (!settingsLoaded) return;
-    saveSettings({ rescuePlan });
-  }, [rescuePlan, settingsLoaded]);
+    if (!settingsLoaded || !uid) return;
+    saveSettings(uid, { rescuePlan });
+  }, [rescuePlan, settingsLoaded, uid]);
 
   useEffect(() => {
     prioritizeTasks();
@@ -155,7 +173,7 @@ function Dashboard() {
         (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
       );
       setTasks(updatedTasks);
-      createTask(newTask);
+      createTask(uid, newTask);
       setTask("");
       setDeadline("");
       setPriority("Medium");
@@ -180,7 +198,7 @@ function Dashboard() {
       (a, b) => new Date(getItemDate(a)) - new Date(getItemDate(b))
     );
     setTasks(updatedTasks);
-    createTask(newEvent);
+    createTask(uid, newEvent);
     setTask("");
     setEventDate("");
     setStartTime("");
@@ -196,7 +214,7 @@ function Dashboard() {
     );
 
     setTasks(updatedTasks);
-    deleteTaskFromFirestore(id);
+    deleteTaskFromFirestore(uid, id);
   };
 
   const prioritizeTasks = () => {
@@ -284,7 +302,7 @@ function Dashboard() {
     );
 
     setTasks(updatedTasks);
-    updateTask(id, { completed: !taskToToggle.completed });
+    updateTask(uid, id, { completed: !taskToToggle.completed });
 
     if (isCompleting) {
       const today = new Date().toISOString().split("T")[0];
@@ -298,7 +316,7 @@ function Dashboard() {
 
         setStreak(newStreak);
         setLastCompletionDate(today);
-        saveSettings({ streak: newStreak, lastCompletionDate: today });
+        saveSettings(uid, { streak: newStreak, lastCompletionDate: today });
       }
     }
   };
