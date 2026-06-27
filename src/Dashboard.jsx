@@ -1,7 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import "./App.css";
 import { breakdownTask, generateDailyPlan, generateEventChecklist, generateRescuePlan, generateTodaysFocus } from "./gemini";
 import { useAuth } from "./context/AuthContext";
+import CollapsiblePanel from "./components/CollapsiblePanel";
+import AIContent from "./components/AIContent";
+import ConfettiCelebration from "./components/ConfettiCelebration";
 import {
   subscribeToTasks,
   fetchTasks,
@@ -95,12 +98,20 @@ function Dashboard() {
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
   const [focusTask, setFocusTask] = useState(null);
   const [focusReason, setFocusReason] = useState("");
+  const [completingIds, setCompletingIds] = useState(new Set());
+  const [xpRewardIds, setXpRewardIds] = useState(new Set());
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const prevProductivityRef = useRef(0);
+  const prevAllCompleteRef = useRef(false);
+  const milestonesInitializedRef = useRef(false);
+  const completionTimerRef = useRef(null);
 
   useEffect(() => {
     if (!uid) return;
 
     setSettingsLoaded(false);
     setTasks([]);
+    milestonesInitializedRef.current = false;
 
     let cancelled = false;
     let unsubscribe = () => {};
@@ -336,6 +347,7 @@ function Dashboard() {
   const toggleComplete = (id) => {
     const taskToToggle = tasks.find((t) => t.id === id);
     const isCompleting = taskToToggle && !taskToToggle.completed;
+    const previousStreak = streak;
 
     const updatedTasks = tasks.map((task) =>
       task.id === id ? { ...task, completed: !task.completed } : task
@@ -357,9 +369,52 @@ function Dashboard() {
         setStreak(newStreak);
         setLastCompletionDate(today);
         saveSettings(uid, { streak: newStreak, lastCompletionDate: today });
+
+        if (newStreak > previousStreak) {
+          setConfettiTrigger((prev) => prev + 1);
+        }
       }
     }
   };
+
+  const handleCompleteClick = (id) => {
+    const taskToToggle = tasks.find((t) => t.id === id);
+    if (!taskToToggle || taskToToggle.completed) {
+      toggleComplete(id);
+      return;
+    }
+
+    setCompletingIds((prev) => new Set(prev).add(id));
+    setXpRewardIds((prev) => new Set(prev).add(id));
+
+    if (completionTimerRef.current) {
+      clearTimeout(completionTimerRef.current);
+    }
+
+    completionTimerRef.current = setTimeout(() => {
+      toggleComplete(id);
+      setCompletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setXpRewardIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 550);
+  };
+
+  const handleConfettiDone = useCallback(() => {}, []);
+
+  useEffect(() => {
+    return () => {
+      if (completionTimerRef.current) {
+        clearTimeout(completionTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleGeneratePlan = async () => {
     const activeItems = tasks.filter((t) => !t.completed);
@@ -574,8 +629,36 @@ function Dashboard() {
       isTask(t) && !t.completed && getStatus(t.deadline) === "DUE TODAY"
   ).length;
 
+  useEffect(() => {
+    if (!settingsLoaded) return;
+
+    const allComplete = totalTasks > 0 && completedTasks === totalTasks;
+
+    if (!milestonesInitializedRef.current) {
+      milestonesInitializedRef.current = true;
+      prevAllCompleteRef.current = allComplete;
+      prevProductivityRef.current = productivityScore;
+      return;
+    }
+
+    if (allComplete && !prevAllCompleteRef.current) {
+      setConfettiTrigger((prev) => prev + 1);
+    }
+    prevAllCompleteRef.current = allComplete;
+
+    if (
+      totalTasks > 0 &&
+      productivityScore === 100 &&
+      prevProductivityRef.current < 100
+    ) {
+      setConfettiTrigger((prev) => prev + 1);
+    }
+    prevProductivityRef.current = productivityScore;
+  }, [settingsLoaded, completedTasks, totalTasks, productivityScore]);
+
   return (
-    <div className="dashboard">
+    <div className="dashboard dashboard--animated">
+      <ConfettiCelebration trigger={confettiTrigger} onDone={handleConfettiDone} />
       <header className="hero">
         <div className="hero__inner">
           <div className="hero__content">
@@ -809,25 +892,25 @@ function Dashboard() {
 
       <hr className="divider" />
 
-      <section id="dashboard" className="stats-grid">
-        <div className="stat-card">
+      <section id="dashboard" className="stats-grid animate-section">
+        <div className="stat-card" style={{ "--stagger-index": 0 }}>
           <h3 className="stat-card__number">{taskCount}</h3>
           <p className="stat-card__label">Tasks</p>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" style={{ "--stagger-index": 1 }}>
           <h3 className="stat-card__number">{eventCount}</h3>
           <p className="stat-card__label">Events</p>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" style={{ "--stagger-index": 2 }}>
           <h3 className="stat-card__number stat-card__number--danger">
             {overdueCount}
           </h3>
           <p className="stat-card__label">Overdue</p>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card" style={{ "--stagger-index": 3 }}>
           <h3 className="stat-card__number stat-card__number--warning">
             {dueTodayCount}
           </h3>
@@ -835,7 +918,7 @@ function Dashboard() {
         </div>
       </section>
 
-      <section id="focus-section" className="focus-section">
+      <section id="focus-section" className="focus-section animate-section">
         <h2 className="section-title">Today's Focus</h2>
 
         <div className="focus-card">
@@ -861,7 +944,7 @@ function Dashboard() {
         </div>
       </section>
 
-      <section id="rescue-section" className="rescue-section">
+      <section id="rescue-section" className="rescue-section animate-section">
         <h2 className="section-title rescue-title">🚨 AI Rescue Mode</h2>
 
         {rescueNeeded ? (
@@ -909,11 +992,14 @@ function Dashboard() {
               </>
             )}
 
-            {rescueVisible && rescuePlan && (
+            <CollapsiblePanel
+              open={rescueVisible && !!rescuePlan}
+              className="rescue-card__plan-collapsible"
+            >
               <div className="rescue-card__plan">
-                <pre className="rescue-text">{rescuePlan}</pre>
+                <AIContent>{rescuePlan}</AIContent>
               </div>
-            )}
+            </CollapsiblePanel>
           </div>
         ) : (
           <div className="rescue-card rescue-card--on-track">
@@ -930,15 +1016,14 @@ function Dashboard() {
 
       <hr className="divider" />
 
-      <section id="daily-planner" className="recommendation-section daily-planner-section">
+      <section id="daily-planner" className="recommendation-section daily-planner-section animate-section">
         <h2 className="section-title">✨ AI Daily Planner</h2>
 
-        {dailyPlan && (
+        <CollapsiblePanel open={!!dailyPlan} className="daily-planner-collapsible">
           <div className="recommendation-card daily-planner-card">
-            <strong>Generated Daily Plan</strong>
-            <pre className="recommendation-card__text">{dailyPlan}</pre>
+            <AIContent title="Generated Daily Plan">{dailyPlan}</AIContent>
           </div>
-        )}
+        </CollapsiblePanel>
 
         <button
           onClick={handleGeneratePlan}
@@ -955,7 +1040,7 @@ function Dashboard() {
 
       <hr className="divider" />
 
-      <section id="tasks-section" className="tasks-section">
+      <section id="tasks-section" className="tasks-section animate-section">
         <input
           type="text"
           placeholder="🔍 Search tasks or events..."
@@ -996,13 +1081,17 @@ function Dashboard() {
             <h3 className="empty-state__title">No matching tasks or events.</h3>
           </div>
         ) : (
-          sortedTasks.map((t) =>
+          sortedTasks.map((t, index) =>
             isEvent(t) ? (
               <div
                 key={t.id}
                 id={`task-${t.id}`}
-                className={`task-card event-card${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
+                className={`task-card-wrapper${completingIds.has(t.id) ? " task-card-wrapper--completing" : ""}`}
+                style={{ "--card-index": index }}
               >
+                <div
+                  className={`task-card event-card${completingIds.has(t.id) ? " task-card--completing" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
+                >
                 <div className="task-card__header">
                   <span className="item-type-badge item-type-badge--event">EVENT</span>
                   <h3 className="task-card__title">{getTitle(t)}</h3>
@@ -1017,8 +1106,9 @@ function Dashboard() {
 
                 <div className="task-card__actions">
                   <button
-                    onClick={() => toggleComplete(t.id)}
+                    onClick={() => handleCompleteClick(t.id)}
                     className="btn btn-secondary"
+                    disabled={completingIds.has(t.id)}
                   >
                     {t.completed ? "Undo" : "Complete"}
                   </button>
@@ -1046,22 +1136,29 @@ function Dashboard() {
                 </div>
 
                 {loadingChecklistEvent === t.id && (
-                  <p className="task-card__meta">Generating event checklist...</p>
+                  <p className="task-card__meta task-card__meta--loading">Generating event checklist...</p>
                 )}
 
-                {visibleChecklists[t.id] && eventChecklists[t.id] && (
-                  <div className="task-card__meta">
-                    <strong>Event Checklist</strong>
-                    <pre>{eventChecklists[t.id]}</pre>
-                  </div>
+                <CollapsiblePanel
+                  open={visibleChecklists[t.id] && !!eventChecklists[t.id]}
+                >
+                  <AIContent title="Event Checklist">{eventChecklists[t.id]}</AIContent>
+                </CollapsiblePanel>
+                </div>
+                {xpRewardIds.has(t.id) && (
+                  <span className="xp-reward" aria-hidden="true">✨ +10 XP</span>
                 )}
               </div>
             ) : (
               <div
                 key={t.id}
-                id={`task-${t.id}`}
-                className={`task-card${focusTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
+                className={`task-card-wrapper${completingIds.has(t.id) ? " task-card-wrapper--completing" : ""}`}
+                style={{ "--card-index": index }}
               >
+                <div
+                  id={`task-${t.id}`}
+                  className={`task-card${focusTask?.id === t.id ? " task-card--top" : ""}${completingIds.has(t.id) ? " task-card--completing" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
+                >
                 <div className="task-card__header">
                   <span className="item-type-badge item-type-badge--task">TASK</span>
                   <h3 className="task-card__title">{getTitle(t)}</h3>
@@ -1084,8 +1181,9 @@ function Dashboard() {
 
                 <div className="task-card__actions">
                   <button
-                    onClick={() => toggleComplete(t.id)}
+                    onClick={() => handleCompleteClick(t.id)}
                     className="btn btn-secondary"
+                    disabled={completingIds.has(t.id)}
                   >
                     {t.completed ? "Undo" : "Complete"}
                   </button>
@@ -1113,14 +1211,17 @@ function Dashboard() {
                 </div>
 
                 {loadingTask === t.id && (
-                  <p className="task-card__meta">Generating AI breakdown...</p>
+                  <p className="task-card__meta task-card__meta--loading">Generating AI breakdown...</p>
                 )}
 
-                {visibleBreakdowns[t.id] && breakdowns[t.id] && (
-                  <div className="task-card__meta">
-                    <strong>AI Breakdown</strong>
-                    <pre>{breakdowns[t.id]}</pre>
-                  </div>
+                <CollapsiblePanel
+                  open={visibleBreakdowns[t.id] && !!breakdowns[t.id]}
+                >
+                  <AIContent title="AI Breakdown">{breakdowns[t.id]}</AIContent>
+                </CollapsiblePanel>
+                </div>
+                {xpRewardIds.has(t.id) && (
+                  <span className="xp-reward" aria-hidden="true">✨ +10 XP</span>
                 )}
               </div>
             )

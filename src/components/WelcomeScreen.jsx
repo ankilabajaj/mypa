@@ -14,8 +14,11 @@ export default function WelcomeScreen() {
   return (
     <div className="welcome">
       <div className="welcome__content">
-        <h1 className="welcome__title">MyPA</h1>
-        <p className="welcome__subtitle">Your AI Productivity Assistant</p>
+        <h1 className="welcome__title">
+          <span className="welcome__brand-name">MyPA</span>
+          <span className="welcome__brand-separator"> – </span>
+          <span className="welcome__brand-full">Your AI Personal Assistant</span>
+        </h1>
 
         <div className="welcome__taglines">
           <p>Plan smarter.</p>
