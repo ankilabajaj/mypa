@@ -136,17 +136,29 @@ export async function generateTodaysFocus(tasks) {
     })
     .join("\n\n");
 
-  const prompt = `You are an AI productivity assistant.
+  const prompt = `You are an expert AI productivity coach.
 
-Based on the user's current time and pending tasks, choose the SINGLE most important task they should focus on right now.
+Your job is to choose the SINGLE most important task the user should focus on RIGHT NOW.
 
-Consider:
-- urgency
-- priority
-- deadlines
-- overdue tasks
-- current time of day
-- overall productivity impact
+You will receive:
+- Current date
+- Current time
+- Current day of the week
+- A list of incomplete tasks
+
+Evaluate EVERY task independently before making your decision.
+
+Do NOT choose a task simply because it appears first in the list.
+
+Use the following priority rules in order:
+
+1. Overdue tasks should generally come first.
+2. Tasks due today should usually come before future tasks.
+3. High priority tasks should usually come before Medium and Low priority tasks.
+4. If two tasks have the same priority and deadline, prefer work, study, career, coding, software development, hackathon, project, business, research, and learning over household chores, errands, or leisure activities.
+5. Prefer tasks that unblock other work or have the greatest long-term impact.
+6. Consider the current time of day when deciding.
+7. Choose the task that provides the greatest productivity benefit if completed now.
 
 Current date: ${currentDate}
 Current local time: ${currentTime}
@@ -156,7 +168,10 @@ Incomplete tasks:
 ${taskList}
 
 Return ONLY valid JSON in this exact format with no markdown, no code fences, and no additional text:
-{"focus":"Task title exactly as listed","reason":"Brief explanation of why this task should be the focus right now"}`;
+{"focus":"Task title exactly as listed","reason":"Brief explanation of why this task should be the focus right now"}
+
+Example:
+{"focus":"Build Knowledge Graph","reason":"This is the highest-impact project task due today. Completing it first reduces project risk and unlocks progress on your hackathon."}`;
 
   try {
     const controller = new AbortController();
