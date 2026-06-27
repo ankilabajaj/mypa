@@ -498,3 +498,106 @@ Use bullet points.`;
     return "Unable to generate rescue plan right now.";
   }
 }
+
+export async function generateEventChecklist(event) {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const model = "gemini-3.1-flash-lite";
+
+  console.log("Gemini model:", model);
+  console.log("Gemini API key detected:", Boolean(apiKey));
+
+  if (!apiKey) {
+    return "Gemini API key not found.";
+  }
+
+  const today = new Date();
+  const currentDate = today.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const dayOfWeek = today.toLocaleDateString("en-GB", { weekday: "long" });
+
+  const title = event.title || event.task || "";
+  const locationLine = event.location
+    ? `Location: ${event.location}\n`
+    : "";
+
+  const prompt = `You are an intelligent event preparation assistant.
+
+Generate a practical preparation checklist for this event.
+
+The checklist should include only useful, actionable items.
+
+If the event type can be inferred (birthday, meeting, interview, exam, trip, hackathon, wedding, doctor's appointment, etc.), tailor the checklist accordingly.
+
+Do not invent unrealistic information.
+
+Return ONLY a markdown checklist.
+
+Example:
+
+* [ ] Buy gift
+* [ ] Charge phone
+* [ ] Carry wallet
+* [ ] Leave home 20 minutes early
+
+Keep the checklist concise and practical.
+At the end of the checklist, include a short **💡 Preparation Tip** (1–2 sentences) with practical advice specific to the event, such as when to leave, what to double-check before leaving, or any important preparation that would help the user. The tip should be concise, personalized to the event, and genuinely useful.
+
+Example:
+
+💡 **Preparation Tip:** Leave home 20 minutes early to allow for unexpected traffic and ensure you arrive on time.
+
+Current date: ${currentDate}
+Current day of week: ${dayOfWeek}
+
+Event information:
+Title: ${title}
+${locationLine}Event date: ${event.eventDate}
+Start time: ${event.startTime}
+End time: ${event.endTime}`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.error("Gemini request failed");
+      console.error("Gemini status:", response.status);
+      console.error("Gemini response body:", responseText);
+      throw new Error(`Gemini request failed with status ${response.status}`);
+    }
+
+    const data = JSON.parse(responseText);
+    console.log("Gemini successful response:", data);
+
+    return (
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Unable to generate event checklist right now."
+    );
+  } catch (error) {
+    console.error("Gemini error:", error);
+    return "Unable to generate event checklist right now.";
+  }
+}

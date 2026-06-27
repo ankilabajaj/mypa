@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
-import { breakdownTask, generateDailyPlan, generateRescuePlan, generateTodaysFocus } from "./gemini";
+import { breakdownTask, generateDailyPlan, generateEventChecklist, generateRescuePlan, generateTodaysFocus } from "./gemini";
 import { useAuth } from "./context/AuthContext";
 import {
   subscribeToTasks,
@@ -81,6 +81,9 @@ function Dashboard() {
   const [breakdowns, setBreakdowns] = useState({});
   const [visibleBreakdowns, setVisibleBreakdowns] = useState({});
   const [loadingTask, setLoadingTask] = useState(null);
+  const [eventChecklists, setEventChecklists] = useState({});
+  const [visibleChecklists, setVisibleChecklists] = useState({});
+  const [loadingChecklistEvent, setLoadingChecklistEvent] = useState(null);
   const [dailyPlan, setDailyPlan] = useState("");
   const [planLoading, setPlanLoading] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -122,6 +125,7 @@ function Dashboard() {
         setStreak(settings.streak || 0);
         setLastCompletionDate(settings.lastCompletionDate || "");
         setBreakdowns(settings.taskBreakdowns || {});
+        setEventChecklists(settings.eventChecklists || {});
         setRescuePlan(settings.rescuePlan || "");
         setSettingsLoaded(true);
       }
@@ -145,6 +149,11 @@ function Dashboard() {
     if (!settingsLoaded || !uid) return;
     saveSettings(uid, { taskBreakdowns: breakdowns });
   }, [breakdowns, settingsLoaded, uid]);
+
+  useEffect(() => {
+    if (!settingsLoaded || !uid) return;
+    saveSettings(uid, { eventChecklists });
+  }, [eventChecklists, settingsLoaded, uid]);
 
   useEffect(() => {
     if (!settingsLoaded || !uid) return;
@@ -397,6 +406,32 @@ function Dashboard() {
       }));
     } finally {
       setLoadingTask(null);
+    }
+  };
+
+  const handleEventChecklist = async (event) => {
+    if (eventChecklists[event.id]) {
+      setVisibleChecklists((prev) => ({
+        ...prev,
+        [event.id]: !prev[event.id],
+      }));
+      return;
+    }
+
+    setLoadingChecklistEvent(event.id);
+
+    try {
+      const response = await generateEventChecklist(event);
+      setEventChecklists((prev) => ({
+        ...prev,
+        [event.id]: response,
+      }));
+      setVisibleChecklists((prev) => ({
+        ...prev,
+        [event.id]: true,
+      }));
+    } finally {
+      setLoadingChecklistEvent(null);
     }
   };
 
@@ -994,7 +1029,32 @@ function Dashboard() {
                   >
                     Delete
                   </button>
+
+                  <button
+                    onClick={() => handleEventChecklist(t)}
+                    className="btn btn-secondary"
+                    disabled={loadingChecklistEvent === t.id}
+                  >
+                    {loadingChecklistEvent === t.id
+                      ? "Generating..."
+                      : eventChecklists[t.id]
+                        ? visibleChecklists[t.id]
+                          ? "👁 Hide Checklist"
+                          : "👁 Show Checklist"
+                        : "✨ Generate Event Checklist"}
+                  </button>
                 </div>
+
+                {loadingChecklistEvent === t.id && (
+                  <p className="task-card__meta">Generating event checklist...</p>
+                )}
+
+                {visibleChecklists[t.id] && eventChecklists[t.id] && (
+                  <div className="task-card__meta">
+                    <strong>Event Checklist</strong>
+                    <pre>{eventChecklists[t.id]}</pre>
+                  </div>
+                )}
               </div>
             ) : (
               <div
