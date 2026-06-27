@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import "./App.css";
-import { breakdownTask, generateDailyPlan, generateRescuePlan } from "./gemini";
+import { breakdownTask, generateDailyPlan, generateRescuePlan, generateTodaysFocus } from "./gemini";
 import { useAuth } from "./context/AuthContext";
 import {
   subscribeToTasks,
@@ -91,6 +91,8 @@ function Dashboard() {
   const [rescueVisible, setRescueVisible] = useState(false);
   const [rescueLoading, setRescueLoading] = useState(false);
   const [highlightedTaskId, setHighlightedTaskId] = useState(null);
+  const [focusTask, setFocusTask] = useState(null);
+  const [focusReason, setFocusReason] = useState("");
 
   useEffect(() => {
     if (!uid) return;
@@ -152,6 +154,36 @@ function Dashboard() {
 
   useEffect(() => {
     prioritizeTasks();
+  }, [tasks]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const updateTodaysFocus = async () => {
+      const fallbackTask = getTopTask();
+
+      if (!fallbackTask) {
+        setFocusTask(null);
+        setFocusReason("");
+        return;
+      }
+
+      setFocusTask(fallbackTask);
+      setFocusReason(getFocusFallbackReason(fallbackTask));
+
+      const result = await generateTodaysFocus(tasks);
+      if (cancelled || !result) return;
+
+      const matchedTask = resolveFocusTask(result.focus, fallbackTask);
+      setFocusTask(matchedTask);
+      setFocusReason(result.reason);
+    };
+
+    updateTodaysFocus();
+
+    return () => {
+      cancelled = true;
+    };
   }, [tasks]);
 
   const addTask = () => {
@@ -285,7 +317,26 @@ function Dashboard() {
     })[0];
   };
 
-  const topTask = getTopTask();
+  const getFocusFallbackReason = (task) =>
+    `${getPriorityLabel(task.priority)}. ${getDueInText(task.deadline)}.`;
+
+  const resolveFocusTask = (focusTitle, fallbackTask) => {
+    const normalizedFocus = focusTitle.trim().toLowerCase();
+    const activeTasks = tasks.filter((task) => isTask(task) && !task.completed);
+
+    const exactMatch = activeTasks.find(
+      (task) => getTitle(task).trim().toLowerCase() === normalizedFocus
+    );
+    if (exactMatch) return exactMatch;
+
+    const partialMatch = activeTasks.find((task) => {
+      const title = getTitle(task).trim().toLowerCase();
+      return title.includes(normalizedFocus) || normalizedFocus.includes(title);
+    });
+    if (partialMatch) return partialMatch;
+
+    return fallbackTask;
+  };
 
   const getPriorityColor = (priority) => {
     if (priority === "High") return "red";
@@ -759,23 +810,18 @@ function Dashboard() {
         <h2 className="section-title">Today's Focus</h2>
 
         <div className="focus-card">
-          {topTask ? (
+          {focusTask ? (
             <>
               <div className="focus-card__icon">🎯</div>
               <p className="focus-card__heading">Today's Focus</p>
               <strong className="focus-card__task-name">
-                Complete {getTitle(topTask)}
+                Complete {getTitle(focusTask)}
               </strong>
-              <p className="focus-card__detail">
-                {getPriorityLabel(topTask.priority)}
-              </p>
-              <p className="focus-card__detail">
-                {getDueInText(topTask.deadline)}
-              </p>
+              <p className="focus-card__detail">{focusReason}</p>
               <button
                 type="button"
                 className="btn btn-secondary focus-card__view-btn"
-                onClick={() => scrollToTask(topTask.id)}
+                onClick={() => scrollToTask(focusTask.id)}
               >
                 View Task
               </button>
@@ -958,7 +1004,7 @@ function Dashboard() {
               <div
                 key={t.id}
                 id={`task-${t.id}`}
-                className={`task-card${topTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
+                className={`task-card${focusTask?.id === t.id ? " task-card--top" : ""}${t.completed ? " task-card--completed" : ""}${highlightedTaskId === t.id ? " task-card--highlighted" : ""}`}
               >
                 <div className="task-card__header">
                   <span className="item-type-badge item-type-badge--task">TASK</span>

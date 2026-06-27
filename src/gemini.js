@@ -65,6 +65,150 @@ function getTaskStatus(deadline) {
   return "UPCOMING";
 }
 
+function formatTaskStatusLabel(deadline) {
+  const status = getTaskStatus(deadline);
+
+  if (status === "OVERDUE") return "Overdue";
+  if (status === "DUE TODAY") return "Due Today";
+  if (status === "THIS WEEK") return "This Week";
+
+  return "Upcoming";
+}
+
+function parseFocusJson(text) {
+  const cleaned = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  const parsed = JSON.parse(cleaned);
+
+  if (
+    typeof parsed.focus !== "string" ||
+    typeof parsed.reason !== "string" ||
+    !parsed.focus.trim() ||
+    !parsed.reason.trim()
+  ) {
+    return null;
+  }
+
+  return { focus: parsed.focus.trim(), reason: parsed.reason.trim() };
+}
+
+export async function generateTodaysFocus(tasks) {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const model = "gemini-3.1-flash-lite";
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const getTitle = (item) => item.title || item.task || "";
+  const getNotes = (item) => item.description || item.notes || "";
+
+  const incompleteTasks = tasks.filter(
+    (item) => item.type !== "event" && !item.completed
+  );
+
+  if (incompleteTasks.length === 0) {
+    return null;
+  }
+
+  const now = new Date();
+  const currentDate = now.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const currentTime = now.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dayOfWeek = now.toLocaleDateString("en-GB", { weekday: "long" });
+
+  const taskList = incompleteTasks
+    .map((task) => {
+      const notes = getNotes(task);
+      return `- Title: ${getTitle(task)}
+  Priority: ${task.priority}
+  Deadline: ${task.deadline}
+  Status: ${formatTaskStatusLabel(task.deadline)}${notes ? `\n  Notes: ${notes}` : ""}`;
+    })
+    .join("\n\n");
+
+  const prompt = `You are an AI productivity assistant.
+
+Based on the user's current time and pending tasks, choose the SINGLE most important task they should focus on right now.
+
+Consider:
+- urgency
+- priority
+- deadlines
+- overdue tasks
+- current time of day
+- overall productivity impact
+
+Current date: ${currentDate}
+Current local time: ${currentTime}
+Current day of week: ${dayOfWeek}
+
+Incomplete tasks:
+${taskList}
+
+Return ONLY valid JSON in this exact format with no markdown, no code fences, and no additional text:
+{"focus":"Task title exactly as listed","reason":"Brief explanation of why this task should be the focus right now"}`;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      console.error("Gemini focus request failed");
+      console.error("Gemini status:", response.status);
+      console.error("Gemini response body:", responseText);
+      return null;
+    }
+
+    const data = JSON.parse(responseText);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (!text) {
+      return null;
+    }
+
+    return parseFocusJson(text);
+  } catch (error) {
+    console.error("Gemini focus error:", error);
+    return null;
+  }
+}
+
 export async function generateDailyPlan(tasks) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   const model = "gemini-3.1-flash-lite";
