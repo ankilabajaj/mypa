@@ -343,6 +343,15 @@
     color: var(--color-text-secondary);
   }
 
+  .form-field__error {
+    grid-column: 1 / -1;
+    margin: calc(-1 * var(--space-2)) 0 var(--space-2);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-danger);
+    text-align: left;
+  }
+
   .task-form__actions {
     display: flex;
     justify-content: center;
@@ -393,6 +402,23 @@
     border-color: var(--color-primary);
     box-shadow: var(--shadow-focus);
     background-color: #ffffff;
+  }
+
+  .input[type="date"],
+  .input[type="time"] {
+    color-scheme: light;
+  }
+
+  .input[type="date"]::-webkit-calendar-picker-indicator,
+  .input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 1;
+    cursor: pointer;
+    filter: brightness(0) saturate(100%);
+  }
+
+  .input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  .input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.75;
   }
   
   .select {

@@ -94,6 +94,9 @@ const getEventStatus = (event) => {
   return "UPCOMING";
 };
 
+const isInvalidEventTimeRange = (startTime, endTime) =>
+  Boolean(startTime && endTime && endTime <= startTime);
+
 function Dashboard() {
   const { user, logout } = useAuth();
   const uid = user?.uid;
@@ -105,6 +108,7 @@ function Dashboard() {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [location, setLocation] = useState("");
+  const [eventTimeError, setEventTimeError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [tasks, setTasks] = useState([]);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -256,6 +260,11 @@ function Dashboard() {
 
     if (!task || !eventDate || !startTime || !endTime) return;
 
+    if (isInvalidEventTimeRange(startTime, endTime)) {
+      setEventTimeError("End time must be after the start time.");
+      return;
+    }
+
     const newEvent = {
       id: Date.now(),
       title: task,
@@ -278,6 +287,7 @@ function Dashboard() {
     setStartTime("");
     setEndTime("");
     setLocation("");
+    setEventTimeError("");
   };
 
   const deleteTask = (id) => {
@@ -583,6 +593,12 @@ function Dashboard() {
     (t) =>
       isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE"
   ).length;
+  const dashboardOverdueCount = tasks.filter((t) => {
+    if (t.completed) return false;
+    if (isTask(t)) return getStatus(t.deadline) === "OVERDUE";
+    if (isEvent(t)) return getEventStatus(t) === "OVERDUE";
+    return false;
+  }).length;
   const highPriorityIncomplete = tasks.filter(
     (t) => isTask(t) && !t.completed && t.priority === "High"
   ).length;
@@ -653,10 +669,13 @@ function Dashboard() {
 
   const taskCount = tasks.filter((t) => isTask(t) && !t.completed).length;
   const eventCount = tasks.filter((t) => isEvent(t) && !t.completed).length;
-  const dueTodayCount = tasks.filter(
-    (t) =>
-      isTask(t) && !t.completed && getStatus(t.deadline) === "DUE TODAY"
-  ).length;
+  const dueTodayCount = tasks.filter((t) => {
+    if (t.completed) return false;
+    if (isTask(t)) return getStatus(t.deadline) === "DUE TODAY";
+    if (isEvent(t)) return getEventStatus(t) === "DUE TODAY";
+    return false;
+  }).length;
+  const eventTimeInvalid = isInvalidEventTimeRange(startTime, endTime);
 
   useEffect(() => {
     if (!settingsLoaded) return;
@@ -877,7 +896,15 @@ function Dashboard() {
                     id="event-start"
                     type="time"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setStartTime(value);
+                      setEventTimeError(
+                        isInvalidEventTimeRange(value, endTime)
+                          ? "End time must be after the start time."
+                          : ""
+                      );
+                    }}
                     className="input"
                   />
                 </div>
@@ -892,10 +919,24 @@ function Dashboard() {
                     id="event-end"
                     type="time"
                     value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEndTime(value);
+                      setEventTimeError(
+                        isInvalidEventTimeRange(startTime, value)
+                          ? "End time must be after the start time."
+                          : ""
+                      );
+                    }}
                     className="input"
                   />
                 </div>
+
+                {eventTimeError && (
+                  <p className="form-field__error" role="alert">
+                    {eventTimeError}
+                  </p>
+                )}
 
                 <div className="form-field">
                   <label className="form-field__label" htmlFor="event-location">
@@ -915,7 +956,11 @@ function Dashboard() {
           )}
 
           <div className="task-form__actions">
-            <button onClick={addTask} className="btn btn-primary task-form__submit">
+            <button
+              onClick={addTask}
+              className="btn btn-primary task-form__submit"
+              disabled={itemType === "event" && eventTimeInvalid}
+            >
               {itemType === "task" ? "Add Task" : "Add Event"}
             </button>
           </div>
@@ -937,7 +982,7 @@ function Dashboard() {
 
         <div className="stat-card" style={{ "--stagger-index": 2 }}>
           <h3 className="stat-card__number stat-card__number--danger">
-            {overdueCount}
+            {dashboardOverdueCount}
           </h3>
           <p className="stat-card__label">Overdue</p>
         </div>
