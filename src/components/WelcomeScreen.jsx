@@ -11,6 +11,11 @@ const FEATURES = [
 export default function WelcomeScreen() {
   const { loginWithGoogle } = useAuth();
 
+  const handleGoogleLogin = () => {
+    sessionStorage.setItem("mypa_show_welcome", "1");
+    loginWithGoogle();
+  };
+
   return (
     <div className="welcome">
       <div className="welcome__content">
@@ -29,7 +34,7 @@ export default function WelcomeScreen() {
         <button
           type="button"
           className="btn btn-primary welcome__google-btn"
-          onClick={loginWithGoogle}
+          onClick={handleGoogleLogin}
         >
           Continue with Google
         </button>

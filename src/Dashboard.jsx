@@ -4,6 +4,7 @@ import { breakdownTask, generateDailyPlan, generateEventChecklist, generateRescu
 import { useAuth } from "./context/AuthContext";
 import CollapsiblePanel from "./components/CollapsiblePanel";
 import AIContent from "./components/AIContent";
+import AILoadingMessage from "./components/AILoadingMessage";
 import ConfettiCelebration from "./components/ConfettiCelebration";
 import {
   subscribeToTasks,
@@ -65,6 +66,32 @@ const isThisMonth = (dateStr) => {
   return (
     d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
   );
+};
+
+const getEventStatus = (event) => {
+  if (event.completed) return "COMPLETED";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDay = new Date(`${event.eventDate}T00:00:00`);
+  eventDay.setHours(0, 0, 0, 0);
+
+  if (eventDay < today) return "OVERDUE";
+
+  if (isSameDay(event.eventDate)) {
+    const now = new Date();
+    const [endHours, endMinutes] = (event.endTime || "23:59").split(":");
+    const endDateTime = new Date(
+      `${event.eventDate}T${endHours.padStart(2, "0")}:${endMinutes.padStart(2, "0")}:00`
+    );
+    if (now > endDateTime) return "OVERDUE";
+    return "DUE TODAY";
+  }
+
+  const diff = Math.ceil((eventDay - today) / (1000 * 60 * 60 * 24));
+  if (diff <= 7) return "THIS WEEK";
+
+  return "UPCOMING";
 };
 
 function Dashboard() {
@@ -522,8 +549,10 @@ function Dashboard() {
       return isThisMonth(dateStr);
     }
     if (filter === "completed") return t.completed;
-    if (filter === "overdue")
+    if (filter === "overdue") {
+      if (isEvent(t)) return !t.completed && getEventStatus(t) === "OVERDUE";
       return isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE";
+    }
     return true;
   });
 
@@ -660,6 +689,9 @@ function Dashboard() {
     <div className="dashboard dashboard--animated">
       <ConfettiCelebration trigger={confettiTrigger} onDone={handleConfettiDone} />
       <header className="hero">
+        <div className="hero__badge-wrap">
+          <span className="gemini-badge">✨ Powered by Google Gemini</span>
+        </div>
         <div className="hero__inner">
           <div className="hero__content">
             <h1 className="hero__title">MyPA</h1>
@@ -992,6 +1024,10 @@ function Dashboard() {
               </>
             )}
 
+            {rescueLoading && (
+              <AILoadingMessage message="✨ Gemini is creating your recovery plan..." />
+            )}
+
             <CollapsiblePanel
               open={rescueVisible && !!rescuePlan}
               className="rescue-card__plan-collapsible"
@@ -1024,6 +1060,10 @@ function Dashboard() {
             <AIContent title="Generated Daily Plan">{dailyPlan}</AIContent>
           </div>
         </CollapsiblePanel>
+
+        {planLoading && (
+          <AILoadingMessage message="✨ Gemini is planning your day..." />
+        )}
 
         <button
           onClick={handleGeneratePlan}
@@ -1104,6 +1144,14 @@ function Dashboard() {
                   <p className="task-card__meta">📍 {t.location}</p>
                 )}
 
+                <div className="task-card__badges">
+                  <span
+                    className={`badge badge-status badge-status--${getEventStatus(t).toLowerCase().replace(/ /g, "-")}`}
+                  >
+                    Status: {getEventStatus(t)}
+                  </span>
+                </div>
+
                 <div className="task-card__actions">
                   <button
                     onClick={() => handleCompleteClick(t.id)}
@@ -1136,7 +1184,7 @@ function Dashboard() {
                 </div>
 
                 {loadingChecklistEvent === t.id && (
-                  <p className="task-card__meta task-card__meta--loading">Generating event checklist...</p>
+                  <AILoadingMessage message="✨ Gemini is preparing your event checklist..." />
                 )}
 
                 <CollapsiblePanel
@@ -1211,7 +1259,7 @@ function Dashboard() {
                 </div>
 
                 {loadingTask === t.id && (
-                  <p className="task-card__meta task-card__meta--loading">Generating AI breakdown...</p>
+                  <AILoadingMessage message="✨ Gemini is breaking this task into steps..." />
                 )}
 
                 <CollapsiblePanel
