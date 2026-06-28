@@ -6,6 +6,8 @@ import CollapsiblePanel from "./components/CollapsiblePanel";
 import AIContent from "./components/AIContent";
 import AILoadingMessage from "./components/AILoadingMessage";
 import ConfettiCelebration from "./components/ConfettiCelebration";
+import NotificationCenter from "./components/NotificationCenter";
+import { useNotifications } from "./hooks/useNotifications";
 import {
   subscribeToTasks,
   fetchTasks,
@@ -180,6 +182,16 @@ function Dashboard() {
   const prevAllCompleteRef = useRef(false);
   const milestonesInitializedRef = useRef(false);
   const completionTimerRef = useRef(null);
+
+  const {
+    notifications,
+    unreadCount,
+    isOpen: notificationsOpen,
+    toggleOpen: toggleNotifications,
+    closePanel: closeNotifications,
+    handleMarkRead,
+    handleClearAll,
+  } = useNotifications(uid, tasks);
 
   useEffect(() => {
     if (!uid) return;
@@ -738,7 +750,17 @@ function Dashboard() {
           </div>
 
           <div className="hero__aside">
-            <div className="user-profile">
+            <div className="hero__aside-top">
+              <NotificationCenter
+                notifications={notifications}
+                unreadCount={unreadCount}
+                isOpen={notificationsOpen}
+                onToggle={toggleNotifications}
+                onClose={closeNotifications}
+                onMarkRead={handleMarkRead}
+                onClearAll={handleClearAll}
+              />
+              <div className="user-profile">
               {user.photoURL && (
                 <img
                   src={user.photoURL}
@@ -757,6 +779,7 @@ function Dashboard() {
               >
                 Logout
               </button>
+              </div>
             </div>
 
             <div className="hero__widgets">
