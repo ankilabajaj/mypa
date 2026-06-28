@@ -42,56 +42,100 @@ const formatTime = (timeStr) => {
   return `${h12}:${minutes} ${ampm}`;
 };
 
+const toLocalDateOnly = (dateStr) => {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
+};
+
+const getTodayLocal = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+};
+
 const isSameDay = (dateStr) => {
-  const today = new Date();
-  const d = new Date(`${dateStr}T00:00:00`);
-  return (
-    d.getDate() === today.getDate() &&
-    d.getMonth() === today.getMonth() &&
-    d.getFullYear() === today.getFullYear()
-  );
+  const date = toLocalDateOnly(dateStr);
+  if (!date) return false;
+  return date.getTime() === getTodayLocal().getTime();
 };
 
-const isWithinDays = (dateStr, days) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(`${dateStr}T00:00:00`);
-  const diff = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
-  return diff >= 0 && diff <= days;
-};
-
-const isThisMonth = (dateStr) => {
-  const today = new Date();
-  const d = new Date(dateStr);
-  return (
-    d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
+const getEventEndDateTime = (event) => {
+  const [endHours, endMinutes] = (event.endTime || "23:59").split(":");
+  const [year, month, day] = event.eventDate.split("-").map(Number);
+  return new Date(
+    year,
+    month - 1,
+    day,
+    parseInt(endHours, 10),
+    parseInt(endMinutes, 10),
+    0,
+    0
   );
 };
 
 const getEventStatus = (event) => {
   if (event.completed) return "COMPLETED";
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const eventDay = new Date(`${event.eventDate}T00:00:00`);
-  eventDay.setHours(0, 0, 0, 0);
+  const today = getTodayLocal();
+  const eventDay = toLocalDateOnly(event.eventDate);
+  if (!eventDay) return "UPCOMING";
 
   if (eventDay < today) return "OVERDUE";
 
-  if (isSameDay(event.eventDate)) {
-    const now = new Date();
-    const [endHours, endMinutes] = (event.endTime || "23:59").split(":");
-    const endDateTime = new Date(
-      `${event.eventDate}T${endHours.padStart(2, "0")}:${endMinutes.padStart(2, "0")}:00`
-    );
-    if (now > endDateTime) return "OVERDUE";
+  if (eventDay.getTime() === today.getTime()) {
+    if (new Date() > getEventEndDateTime(event)) return "OVERDUE";
     return "DUE TODAY";
   }
 
-  const diff = Math.ceil((eventDay - today) / (1000 * 60 * 60 * 24));
+  const diff = Math.round((eventDay - today) / (1000 * 60 * 60 * 24));
   if (diff <= 7) return "THIS WEEK";
 
   return "UPCOMING";
+};
+
+const getTaskStatus = (deadline) => {
+  const today = getTodayLocal();
+  const due = toLocalDateOnly(deadline);
+  if (!due) return "UPCOMING";
+
+  if (due < today) return "OVERDUE";
+  if (due.getTime() === today.getTime()) return "DUE TODAY";
+
+  const diff = Math.round((due - today) / (1000 * 60 * 60 * 24));
+  if (diff <= 7) return "THIS WEEK";
+
+  return "UPCOMING";
+};
+
+const isItemDueToday = (item) => {
+  if (item.completed) return false;
+  if (isEvent(item)) return getEventStatus(item) === "DUE TODAY";
+  if (isTask(item)) return getTaskStatus(item.deadline) === "DUE TODAY";
+  return false;
+};
+
+const isItemOverdue = (item) => {
+  if (item.completed) return false;
+  if (isEvent(item)) return getEventStatus(item) === "OVERDUE";
+  if (isTask(item)) return getTaskStatus(item.deadline) === "OVERDUE";
+  return false;
+};
+
+const isWithinDays = (dateStr, days) => {
+  const today = getTodayLocal();
+  const d = toLocalDateOnly(dateStr);
+  if (!d) return false;
+  const diff = Math.round((d - today) / (1000 * 60 * 60 * 24));
+  return diff >= 0 && diff <= days;
+};
+
+const isThisMonth = (dateStr) => {
+  const today = new Date();
+  const d = toLocalDateOnly(dateStr);
+  if (!d) return false;
+  return (
+    d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear()
+  );
 };
 
 const isInvalidEventTimeRange = (startTime, endTime) =>
@@ -301,18 +345,7 @@ function Dashboard() {
     deleteTaskFromFirestore(uid, id);
   };
 
-  const getStatus = (deadline) => {
-    const today = new Date();
-    const due = new Date(deadline);
-
-    const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-
-    if (diff < 0) return "OVERDUE";
-    if (diff === 0) return "DUE TODAY";
-    if (diff <= 7) return "THIS WEEK";
-
-    return "UPCOMING";
-  };
+  const getStatus = (deadline) => getTaskStatus(deadline);
 
   const getStatusColor = (deadline) => {
     const status = getStatus(deadline);
@@ -543,15 +576,14 @@ function Dashboard() {
     }
 
     if (filter === "all") return true;
-    if (filter === "today") {
-      if (isEvent(t)) return isSameDay(t.eventDate);
-      return getStatus(t.deadline) === "DUE TODAY";
-    }
+    if (filter === "today") return isItemDueToday(t);
     if (filter === "this-week") {
+      if (t.completed) return false;
       if (isEvent(t)) return isWithinDays(t.eventDate, 7);
-      const today = new Date();
-      const due = new Date(t.deadline);
-      const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+      const today = getTodayLocal();
+      const due = toLocalDateOnly(t.deadline);
+      if (!due) return false;
+      const diff = Math.round((due - today) / (1000 * 60 * 60 * 24));
       return diff >= 0 && diff <= 7;
     }
     if (filter === "this-month") {
@@ -559,10 +591,7 @@ function Dashboard() {
       return isThisMonth(dateStr);
     }
     if (filter === "completed") return t.completed;
-    if (filter === "overdue") {
-      if (isEvent(t)) return !t.completed && getEventStatus(t) === "OVERDUE";
-      return isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE";
-    }
+    if (filter === "overdue") return isItemOverdue(t);
     return true;
   });
 
@@ -590,15 +619,9 @@ function Dashboard() {
   });
 
   const overdueCount = tasks.filter(
-    (t) =>
-      isTask(t) && !t.completed && getStatus(t.deadline) === "OVERDUE"
+    (t) => isTask(t) && isItemOverdue(t)
   ).length;
-  const dashboardOverdueCount = tasks.filter((t) => {
-    if (t.completed) return false;
-    if (isTask(t)) return getStatus(t.deadline) === "OVERDUE";
-    if (isEvent(t)) return getEventStatus(t) === "OVERDUE";
-    return false;
-  }).length;
+  const dashboardOverdueCount = tasks.filter((t) => isItemOverdue(t)).length;
   const highPriorityIncomplete = tasks.filter(
     (t) => isTask(t) && !t.completed && t.priority === "High"
   ).length;
@@ -669,12 +692,7 @@ function Dashboard() {
 
   const taskCount = tasks.filter((t) => isTask(t) && !t.completed).length;
   const eventCount = tasks.filter((t) => isEvent(t) && !t.completed).length;
-  const dueTodayCount = tasks.filter((t) => {
-    if (t.completed) return false;
-    if (isTask(t)) return getStatus(t.deadline) === "DUE TODAY";
-    if (isEvent(t)) return getEventStatus(t) === "DUE TODAY";
-    return false;
-  }).length;
+  const dueTodayCount = tasks.filter((t) => isItemDueToday(t)).length;
   const eventTimeInvalid = isInvalidEventTimeRange(startTime, endTime);
 
   useEffect(() => {
