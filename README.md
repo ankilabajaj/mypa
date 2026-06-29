@@ -64,6 +64,12 @@ MyPA proactively guides users toward completing the right work at the right time
 - AI Event Checklist
 - AI Preparation Tips
 
+<img width="1440" height="900" alt="Screenshot 2026-06-29 at 12 26 40 AM" src="https://github.com/user-attachments/assets/08c586dc-f37d-4670-913c-a191c82dd382" />
+
+<img width="1436" height="859" alt="Screenshot 2026-06-29 at 6 49 49 PM" src="https://github.com/user-attachments/assets/f881b750-4ee3-4d47-9538-a1c7478df4af" />
+
+<img width="1431" height="851" alt="Screenshot 2026-06-29 at 6 49 42 PM" src="https://github.com/user-attachments/assets/dd9ac07a-85f8-4429-b01c-44831f21a7f2" />
+
 ---
 
 ## 🤖 AI Features (Powered by Google Gemini)
@@ -71,6 +77,9 @@ MyPA proactively guides users toward completing the right work at the right time
 ### 🎯 Today's Focus
 
 Analyzes today's tasks and recommends the single most important task to work on.
+
+<img width="1431" height="850" alt="Screenshot 2026-06-29 at 6 48 26 PM" src="https://github.com/user-attachments/assets/bd8ea387-b597-4cb3-9f5d-45fab6d6e740" />
+
 
 ---
 
@@ -82,6 +91,9 @@ Generates a personalized schedule based on:
 - deadlines
 - priorities
 
+<img width="1433" height="853" alt="Screenshot 2026-06-29 at 6 48 01 PM" src="https://github.com/user-attachments/assets/0367c963-6d85-49fc-ab57-191069aa58e5" />
+
+
 ---
 
 ### 🚨 AI Rescue Mode
@@ -91,6 +103,9 @@ When work piles up:
 - reorganizes priorities
 - creates a recovery strategy
 - generates a practical rescue plan
+
+<img width="1433" height="851" alt="Screenshot 2026-06-29 at 6 48 53 PM" src="https://github.com/user-attachments/assets/82af9e71-1f31-42b2-b5d9-03e1f97fb44b" />
+
 
 ---
 
@@ -110,6 +125,9 @@ Build AI App
 - Test
 - Deploy
 
+<img width="1430" height="813" alt="Screenshot 2026-06-29 at 6 49 14 PM" src="https://github.com/user-attachments/assets/bf183168-f174-4e2d-9631-587f94c5d546" />
+
+
 ---
 
 ### ✅ AI Event Checklist
@@ -122,6 +140,9 @@ Includes:
 - preparation steps
 - travel reminders
 - preparation tip
+
+<img width="1435" height="850" alt="Screenshot 2026-06-29 at 6 49 31 PM" src="https://github.com/user-attachments/assets/c72a1168-1c9f-4006-bcb0-8526e1fa9090" />
+
 
 ---
 
@@ -193,21 +214,6 @@ users/
 
 ---
 
-# 📷 Screenshots
-
-> Add screenshots here before submission.
-
-Suggested screenshots:
-
-- Login Page
-- Dashboard
-- Today's Focus
-- AI Daily Planner
-- AI Rescue Mode
-- Task Breakdown
-- Event Checklist
-- Notification Center
-
 ---
 
 # ⚙ Installation
@@ -238,27 +244,7 @@ npm run build
 
 ---
 
-# 🔑 Environment Variables
 
-Create a `.env` file containing:
-
-```
-VITE_GEMINI_API_KEY=
-
-VITE_FIREBASE_API_KEY=
-
-VITE_FIREBASE_AUTH_DOMAIN=
-
-VITE_FIREBASE_PROJECT_ID=
-
-VITE_FIREBASE_STORAGE_BUCKET=
-
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-
-VITE_FIREBASE_APP_ID=
-```
-
----
 
 # 🚀 Future Improvements
 
