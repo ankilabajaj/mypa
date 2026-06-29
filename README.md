@@ -37,6 +37,22 @@ MyPA proactively guides users toward completing the right work at the right time
 
 ---
 
+## 💡 Why MyPA?
+
+Most productivity apps simply remind users about upcoming tasks.
+
+MyPA goes a step further by using Google Gemini AI to:
+
+- prioritize what matters most
+- generate personalized daily plans
+- recover from missed deadlines
+- break complex tasks into actionable steps
+- prepare users for upcoming events
+
+Instead of asking **"What should I do next?"**, MyPA answers it intelligently.
+
+---
+
 # ✨ Features
 
 ## 📋 Task Management
